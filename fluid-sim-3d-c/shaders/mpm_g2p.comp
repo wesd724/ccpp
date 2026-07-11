@@ -1,0 +1,213 @@
+#version 430 core
+
+layout(local_size_x = 256) in;
+
+struct Particle {
+    vec4 position;
+    vec4 velocity;
+    vec4 deformation0;
+    vec4 deformation1;
+    vec4 deformation2;
+    vec4 affine0;
+    vec4 affine1;
+    vec4 affine2;
+    vec4 state;
+};
+
+layout(std430, binding = 0) buffer Particles { Particle particles[]; };
+layout(std430, binding = 2) readonly buffer GridVelocity { vec4 grid_velocity[]; };
+
+uniform int u_particle_count;
+uniform ivec3 u_grid;
+uniform vec3 u_domain_min;
+uniform float u_dx;
+uniform float u_dt;
+uniform float u_time;
+
+const float PI = 3.14159265358979323846;
+
+int grid_index(ivec3 c) {
+    return (c.z * u_grid.y + c.y) * u_grid.x + c.x;
+}
+
+mat3 particle_matrix(vec4 c0, vec4 c1, vec4 c2) {
+    return mat3(c0.xyz, c1.xyz, c2.xyz);
+}
+
+float frobenius(mat3 value) {
+    return sqrt(dot(value[0], value[0]) + dot(value[1], value[1]) +
+                dot(value[2], value[2]));
+}
+
+mat3 polar_rotation(mat3 value) {
+    mat3 rotation = value;
+    for (int i = 0; i < 5; ++i) {
+        float det_value = determinant(rotation);
+        if (abs(det_value) < 0.015) rotation += mat3(0.015);
+        rotation = 0.5 * (rotation + transpose(inverse(rotation)));
+    }
+    return rotation;
+}
+
+vec2 rotate_inverse(vec2 value, float angle) {
+    float c = cos(angle);
+    float s = sin(angle);
+    return vec2(c * value.x + s * value.y, -s * value.x + c * value.y);
+}
+
+vec2 rotate_forward(vec2 value, float angle) {
+    float c = cos(angle);
+    float s = sin(angle);
+    return vec2(c * value.x - s * value.y, s * value.x + c * value.y);
+}
+
+void collide_rotor(inout vec3 position, inout vec3 velocity,
+                   vec2 center, float angle, float omega) {
+    if (abs(position.z) > 2.42) return;
+    vec2 relative = position.xy - center;
+    vec2 normal = vec2(0.0);
+    bool collision = false;
+    float distance = length(relative);
+    if (distance < 0.56) {
+        normal = distance > 0.0001 ? relative / distance : vec2(0.0, 1.0);
+        position.xy = center + normal * 0.56;
+        collision = true;
+    }
+    for (int arm = 0; arm < 5 && !collision; ++arm) {
+        float arm_angle = angle + float(arm) * (2.0 * PI / 5.0);
+        vec2 local = rotate_inverse(relative, arm_angle) - vec2(0.72, 0.0);
+        vec2 half_extent = vec2(0.78, 0.21);
+        if (abs(local.x) < half_extent.x && abs(local.y) < half_extent.y) {
+            vec2 penetration = half_extent - abs(local);
+            vec2 local_normal;
+            if (penetration.x < penetration.y) {
+                local_normal = vec2(sign(local.x), 0.0);
+                local.x = local_normal.x * half_extent.x;
+            } else {
+                local_normal = vec2(0.0, sign(local.y));
+                local.y = local_normal.y * half_extent.y;
+            }
+            position.xy = center + rotate_forward(local + vec2(0.72, 0.0), arm_angle);
+            normal = rotate_forward(local_normal, arm_angle);
+            collision = true;
+        }
+    }
+    if (collision) {
+        vec2 corrected_relative = position.xy - center;
+        vec2 solid_velocity = vec2(-omega * corrected_relative.y,
+                                    omega * corrected_relative.x);
+        vec2 relative_velocity = velocity.xy - solid_velocity;
+        float inward = dot(relative_velocity, normal);
+        if (inward < 0.0) relative_velocity -= normal * inward * 1.35;
+        vec2 tangent = vec2(-normal.y, normal.x);
+        relative_velocity -= tangent * dot(relative_velocity, tangent) * 0.24;
+        velocity.xy = solid_velocity + relative_velocity;
+    }
+}
+
+void project_material(inout mat3 deformation, int material,
+                      inout float damage, out float strain) {
+    float jacobian = determinant(deformation);
+    if (isnan(jacobian) || isinf(jacobian) || jacobian <= 0.08 || jacobian > 6.0) {
+        deformation = mat3(1.0);
+        damage = min(damage + 0.08, 1.0);
+        strain = 0.0;
+        return;
+    }
+    mat3 rotation = polar_rotation(deformation);
+    float isotropic_scale = pow(max(jacobian, 0.001), 1.0 / 3.0);
+    mat3 shear = deformation - rotation * isotropic_scale;
+    strain = frobenius(shear);
+    float yield_limit = material == 0 ? 0.82 : material == 1 ? 0.19 : 0.065;
+    if (strain > yield_limit) {
+        float retained = yield_limit / max(strain, 0.0001);
+        if (material == 0) retained = mix(1.0, retained, 0.18);
+        deformation = rotation * isotropic_scale + shear * retained;
+        damage = clamp(damage + (strain - yield_limit) *
+                       (material == 0 ? 0.012 : 0.09), 0.0, 1.0);
+    }
+    float low = material == 0 ? 0.48 : material == 1 ? 0.66 : 0.58;
+    float high = material == 0 ? 1.72 : material == 1 ? 1.22 : 1.04;
+    float clamped_jacobian = clamp(determinant(deformation), low, high);
+    deformation *= pow(clamped_jacobian / max(determinant(deformation), 0.001), 1.0 / 3.0);
+}
+
+void main() {
+    uint particle_id = gl_GlobalInvocationID.x;
+    if (particle_id >= uint(u_particle_count)) return;
+    Particle particle = particles[particle_id];
+    vec3 grid_position = (particle.position.xyz - u_domain_min) / u_dx;
+    ivec3 base = ivec3(floor(grid_position - vec3(0.5)));
+    vec3 fraction = grid_position - vec3(base);
+    vec3 weights[3];
+    weights[0] = 0.5 * (vec3(1.5) - fraction) * (vec3(1.5) - fraction);
+    weights[1] = vec3(0.75) - (fraction - vec3(1.0)) * (fraction - vec3(1.0));
+    weights[2] = 0.5 * (fraction - vec3(0.5)) * (fraction - vec3(0.5));
+    vec3 new_velocity = vec3(0.0);
+    mat3 new_affine = mat3(0.0);
+    for (int z = 0; z < 3; ++z) {
+        for (int y = 0; y < 3; ++y) {
+            for (int x = 0; x < 3; ++x) {
+                ivec3 cell = base + ivec3(x, y, z);
+                if (any(lessThan(cell, ivec3(0))) || any(greaterThanEqual(cell, u_grid))) continue;
+                float weight = weights[x].x * weights[y].y * weights[z].z;
+                vec3 grid_value = grid_velocity[grid_index(cell)].xyz;
+                vec3 displacement = vec3(x, y, z) - fraction;
+                new_velocity += weight * grid_value;
+                new_affine += (4.0 / u_dx) * weight * outerProduct(grid_value, displacement);
+            }
+        }
+    }
+    int material = int(particle.position.w + 0.5);
+    float damping = material == 0 ? 0.08 : material == 1 ? 0.34 : 0.72;
+    new_velocity *= exp(-damping * u_dt);
+    vec3 position = particle.position.xyz + new_velocity * u_dt;
+    mat3 deformation = particle_matrix(particle.deformation0,
+                                       particle.deformation1,
+                                       particle.deformation2);
+    deformation = (mat3(1.0) + u_dt * new_affine) * deformation;
+    float damage = particle.state.y;
+    float strain;
+    project_material(deformation, material, damage, strain);
+
+    float left_omega = -2.65;
+    float right_omega = 2.65;
+    collide_rotor(position, new_velocity, vec2(-1.35, -0.72),
+                  left_omega * u_time, left_omega);
+    collide_rotor(position, new_velocity, vec2(1.35, -0.72),
+                  right_omega * u_time + PI, right_omega);
+
+    const float margin = 0.10;
+    vec3 domain_max = u_domain_min + vec3(u_grid) * u_dx;
+    if (position.y < -2.25 + margin) {
+        position.y = -2.25 + margin;
+        if (new_velocity.y < 0.0) new_velocity.y *= -0.08;
+        new_velocity.xz *= material == 2 ? 0.62 : 0.78;
+    }
+    if (position.x < u_domain_min.x + margin) { position.x = u_domain_min.x + margin; new_velocity.x = abs(new_velocity.x) * 0.12; }
+    if (position.x > domain_max.x - margin) { position.x = domain_max.x - margin; new_velocity.x = -abs(new_velocity.x) * 0.12; }
+    if (position.z < u_domain_min.z + margin) { position.z = u_domain_min.z + margin; new_velocity.z = abs(new_velocity.z) * 0.12; }
+    if (position.z > domain_max.z - margin) { position.z = domain_max.z - margin; new_velocity.z = -abs(new_velocity.z) * 0.12; }
+    if (position.y > domain_max.y - margin) { position.y = domain_max.y - margin; new_velocity.y = -abs(new_velocity.y) * 0.10; }
+
+    if (any(isnan(position)) || any(isinf(position)) ||
+        any(isnan(new_velocity)) || any(isinf(new_velocity))) {
+        position = vec3(0.0, 5.0, 0.0);
+        new_velocity = vec3(0.0);
+        deformation = mat3(1.0);
+        new_affine = mat3(0.0);
+        damage = 1.0;
+        strain = 0.0;
+    }
+    particle.position.xyz = position;
+    particle.velocity = vec4(new_velocity, clamp(strain, 0.0, 2.0));
+    particle.deformation0.xyz = deformation[0];
+    particle.deformation1.xyz = deformation[1];
+    particle.deformation2.xyz = deformation[2];
+    particle.affine0.xyz = new_affine[0];
+    particle.affine1.xyz = new_affine[1];
+    particle.affine2.xyz = new_affine[2];
+    particle.state.x = determinant(deformation);
+    particle.state.y = damage;
+    particles[particle_id] = particle;
+}

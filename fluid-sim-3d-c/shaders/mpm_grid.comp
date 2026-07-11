@@ -1,0 +1,87 @@
+#version 430 core
+
+layout(local_size_x = 256) in;
+layout(std430, binding = 1) readonly buffer GridAccum { ivec4 accum[]; };
+layout(std430, binding = 2) buffer GridVelocity { vec4 grid_velocity[]; };
+
+uniform ivec3 u_grid;
+uniform int u_grid_cells;
+uniform vec3 u_domain_min;
+uniform float u_dx;
+uniform float u_dt;
+uniform float u_time;
+uniform int u_impulse_count;
+uniform vec3 u_impulse_center[4];
+uniform vec3 u_impulse_radius[4];
+uniform vec3 u_impulse_acceleration[4];
+
+const float ATOMIC_SCALE = 4096.0;
+const float PI = 3.14159265358979323846;
+
+ivec3 grid_coord(uint id) {
+    int x = int(id) % u_grid.x;
+    int yz = int(id) / u_grid.x;
+    return ivec3(x, yz % u_grid.y, yz / u_grid.y);
+}
+
+vec2 rotate_inverse(vec2 value, float angle) {
+    float c = cos(angle);
+    float s = sin(angle);
+    return vec2(c * value.x + s * value.y, -s * value.x + c * value.y);
+}
+
+bool inside_rotor(vec3 position, vec2 center, float angle, float omega,
+                  out vec3 solid_velocity) {
+    vec2 relative = position.xy - center;
+    if (abs(position.z) > 2.38) return false;
+    solid_velocity = vec3(-omega * relative.y, omega * relative.x, 0.0);
+    if (length(relative) < 0.49) return true;
+    for (int arm = 0; arm < 5; ++arm) {
+        float arm_angle = angle + float(arm) * (2.0 * PI / 5.0);
+        vec2 local = rotate_inverse(relative, arm_angle) - vec2(0.72, 0.0);
+        if (abs(local.x) < 0.72 && abs(local.y) < 0.15) return true;
+    }
+    return false;
+}
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= uint(u_grid_cells)) return;
+    if (accum[id].w <= 2) {
+        grid_velocity[id] = vec4(0.0);
+        return;
+    }
+    vec3 velocity = vec3(accum[id].xyz) / float(accum[id].w);
+    velocity.y -= 9.81 * u_dt;
+    velocity *= exp(-0.09 * u_dt);
+    ivec3 cell = grid_coord(id);
+    vec3 world = u_domain_min + vec3(cell) * u_dx;
+
+    for (int i = 0; i < u_impulse_count; ++i) {
+        vec3 local = (world - u_impulse_center[i]) /
+                     max(u_impulse_radius[i], vec3(0.001));
+        float falloff = max(1.0 - dot(local, local), 0.0);
+        velocity += u_impulse_acceleration[i] * falloff * falloff * u_dt;
+    }
+
+    float left_omega = -2.65;
+    float right_omega = 2.65;
+    vec3 solid_velocity;
+    if (inside_rotor(world, vec2(-1.35, -0.72), left_omega * u_time,
+                     left_omega, solid_velocity) ||
+        inside_rotor(world, vec2(1.35, -0.72), right_omega * u_time + PI,
+                     right_omega, solid_velocity)) {
+        velocity = solid_velocity;
+    }
+
+    if (world.y < -2.25 + u_dx * 1.35 && velocity.y < 0.0) {
+        velocity.y = 0.0;
+        velocity.xz *= 0.78;
+    }
+    if (cell.x < 2 && velocity.x < 0.0) velocity.x = 0.0;
+    if (cell.x >= u_grid.x - 2 && velocity.x > 0.0) velocity.x = 0.0;
+    if (cell.z < 2 && velocity.z < 0.0) velocity.z = 0.0;
+    if (cell.z >= u_grid.z - 2 && velocity.z > 0.0) velocity.z = 0.0;
+    if (cell.y >= u_grid.y - 2 && velocity.y > 0.0) velocity.y = 0.0;
+    grid_velocity[id] = vec4(velocity, float(accum[id].w) / ATOMIC_SCALE);
+}

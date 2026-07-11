@@ -1,0 +1,111 @@
+#version 430 core
+
+layout(local_size_x = 256) in;
+
+struct Particle {
+    vec4 position;
+    vec4 velocity;
+    vec4 deformation0;
+    vec4 deformation1;
+    vec4 deformation2;
+    vec4 affine0;
+    vec4 affine1;
+    vec4 affine2;
+    vec4 state;
+};
+
+layout(std430, binding = 0) readonly buffer Particles { Particle particles[]; };
+layout(std430, binding = 1) buffer GridAccum { ivec4 accum[]; };
+
+uniform int u_particle_count;
+uniform ivec3 u_grid;
+uniform vec3 u_domain_min;
+uniform float u_dx;
+uniform float u_dt;
+
+const float ATOMIC_SCALE = 4096.0;
+
+int grid_index(ivec3 c) {
+    return (c.z * u_grid.y + c.y) * u_grid.x + c.x;
+}
+
+mat3 particle_matrix(vec4 c0, vec4 c1, vec4 c2) {
+    return mat3(c0.xyz, c1.xyz, c2.xyz);
+}
+
+mat3 polar_rotation(mat3 value) {
+    mat3 rotation = value;
+    for (int i = 0; i < 5; ++i) {
+        float det_value = determinant(rotation);
+        if (abs(det_value) < 0.015) rotation += mat3(0.015);
+        rotation = 0.5 * (rotation + transpose(inverse(rotation)));
+    }
+    return rotation;
+}
+
+void material_parameters(int material, float damage, out float mu, out float lambda) {
+    if (material == 0) {
+        mu = 17.0;
+        lambda = 28.0;
+    } else if (material == 1) {
+        mu = 10.5;
+        lambda = 23.0;
+    } else {
+        mu = 4.2;
+        lambda = 17.0;
+    }
+    mu *= mix(1.0, 0.62, clamp(damage, 0.0, 1.0));
+}
+
+void main() {
+    uint particle_id = gl_GlobalInvocationID.x;
+    if (particle_id >= uint(u_particle_count)) return;
+    Particle particle = particles[particle_id];
+    mat3 deformation = particle_matrix(particle.deformation0,
+                                       particle.deformation1,
+                                       particle.deformation2);
+    mat3 affine_velocity = particle_matrix(particle.affine0,
+                                           particle.affine1,
+                                           particle.affine2);
+    int material = int(particle.position.w + 0.5);
+    float mu;
+    float lambda;
+    material_parameters(material, particle.state.y, mu, lambda);
+    mat3 rotation = polar_rotation(deformation);
+    float jacobian = clamp(determinant(deformation), 0.22, 2.4);
+    float volumetric = jacobian - 1.0;
+    if (material == 2) volumetric = min(volumetric, 0.0);
+    mat3 kirchhoff = 2.0 * mu * (deformation - rotation) * transpose(deformation) +
+                     mat3(lambda * jacobian * volumetric);
+    mat3 affine = affine_velocity -
+                  (u_dt * 4.0 / (u_dx * u_dx)) * kirchhoff;
+    affine[0] = clamp(affine[0], vec3(-55.0), vec3(55.0));
+    affine[1] = clamp(affine[1], vec3(-55.0), vec3(55.0));
+    affine[2] = clamp(affine[2], vec3(-55.0), vec3(55.0));
+
+    vec3 grid_position = (particle.position.xyz - u_domain_min) / u_dx;
+    ivec3 base = ivec3(floor(grid_position - vec3(0.5)));
+    vec3 fraction = grid_position - vec3(base);
+    vec3 weights[3];
+    weights[0] = 0.5 * (vec3(1.5) - fraction) * (vec3(1.5) - fraction);
+    weights[1] = vec3(0.75) - (fraction - vec3(1.0)) * (fraction - vec3(1.0));
+    weights[2] = 0.5 * (fraction - vec3(0.5)) * (fraction - vec3(0.5));
+
+    for (int z = 0; z < 3; ++z) {
+        for (int y = 0; y < 3; ++y) {
+            for (int x = 0; x < 3; ++x) {
+                ivec3 cell = base + ivec3(x, y, z);
+                if (any(lessThan(cell, ivec3(0))) || any(greaterThanEqual(cell, u_grid))) continue;
+                float weight = weights[x].x * weights[y].y * weights[z].z;
+                vec3 displacement = (vec3(x, y, z) - fraction) * u_dx;
+                vec3 momentum = particle.velocity.xyz + affine * displacement;
+                momentum = clamp(momentum, vec3(-70.0), vec3(70.0));
+                int id = grid_index(cell);
+                atomicAdd(accum[id].x, int(round(momentum.x * weight * ATOMIC_SCALE)));
+                atomicAdd(accum[id].y, int(round(momentum.y * weight * ATOMIC_SCALE)));
+                atomicAdd(accum[id].z, int(round(momentum.z * weight * ATOMIC_SCALE)));
+                atomicAdd(accum[id].w, int(round(weight * ATOMIC_SCALE)));
+            }
+        }
+    }
+}

@@ -1,0 +1,38 @@
+#version 430 core
+
+layout(local_size_x = 256) in;
+layout(std430, binding = 3) buffer GridVelocity { vec4 velocity[]; };
+uniform float u_dt;
+uniform int u_impulse_count;
+uniform vec3 u_impulse_center[4];
+uniform vec3 u_impulse_radius[4];
+uniform vec3 u_impulse_acceleration[4];
+uniform ivec3 u_grid;
+uniform int u_grid_cells;
+uniform vec3 u_domain_min;
+uniform float u_dx;
+
+ivec3 grid_coord(uint id) {
+    int x = int(id) % u_grid.x;
+    int yz = int(id) / u_grid.x;
+    return ivec3(x, yz % u_grid.y, yz / u_grid.y);
+}
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= uint(u_grid_cells) || velocity[id].w < 0.5) return;
+    ivec3 cell = grid_coord(id);
+    velocity[id].y -= 9.81 * u_dt;
+    vec3 world = u_domain_min + (vec3(cell) + vec3(0.5)) * u_dx;
+    for (int i = 0; i < u_impulse_count; ++i) {
+        vec3 local = (world - u_impulse_center[i]) / max(u_impulse_radius[i], vec3(0.001));
+        float falloff = max(1.0 - dot(local, local), 0.0);
+        velocity[id].xyz += u_impulse_acceleration[i] * falloff * falloff * u_dt;
+    }
+    if (cell.x <= 1 && velocity[id].x < 0.0) velocity[id].x = 0.0;
+    if (cell.x >= u_grid.x - 2 && velocity[id].x > 0.0) velocity[id].x = 0.0;
+    if (cell.y <= 1 && velocity[id].y < 0.0) velocity[id].y = 0.0;
+    if (cell.y >= u_grid.y - 2 && velocity[id].y > 0.0) velocity[id].y = 0.0;
+    if (cell.z <= 1 && velocity[id].z < 0.0) velocity[id].z = 0.0;
+    if (cell.z >= u_grid.z - 2 && velocity[id].z > 0.0) velocity[id].z = 0.0;
+}

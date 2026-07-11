@@ -1,0 +1,87 @@
+#version 430 core
+
+layout(local_size_x = 256) in;
+
+struct Particle { vec4 position; vec4 velocity; };
+layout(std430, binding = 0) readonly buffer ParticlesIn { Particle particles_in[]; };
+layout(std430, binding = 1) writeonly buffer ParticlesOut { Particle particles_out[]; };
+layout(std430, binding = 3) readonly buffer GridVelocity { vec4 grid_velocity[]; };
+layout(std430, binding = 4) readonly buffer GridVelocityOld { vec4 grid_velocity_old[]; };
+
+uniform float u_dt;
+uniform int u_particle_count;
+uniform ivec3 u_grid;
+uniform vec3 u_domain_min;
+uniform float u_dx;
+
+int grid_index(ivec3 c) { return (c.z * u_grid.y + c.y) * u_grid.x + c.x; }
+
+vec3 sample_new(vec3 position) {
+    vec3 gp = (position - u_domain_min) / u_dx - vec3(0.5);
+    ivec3 base = ivec3(floor(gp));
+    vec3 f = fract(gp);
+    vec3 result = vec3(0.0);
+    float total = 0.0;
+    for (int z=0; z<=1; ++z) for (int y=0; y<=1; ++y) for (int x=0; x<=1; ++x) {
+        ivec3 c = clamp(base + ivec3(x,y,z), ivec3(0), u_grid-1);
+        vec3 w = mix(vec3(1.0)-f, f, vec3(x,y,z));
+        float weight = w.x*w.y*w.z;
+        result += grid_velocity[grid_index(c)].xyz * weight;
+        total += weight;
+    }
+    return result / max(total, 0.0001);
+}
+
+vec3 sample_old(vec3 position) {
+    vec3 gp = (position - u_domain_min) / u_dx - vec3(0.5);
+    ivec3 base = ivec3(floor(gp));
+    vec3 f = fract(gp);
+    vec3 result = vec3(0.0);
+    for (int z=0; z<=1; ++z) for (int y=0; y<=1; ++y) for (int x=0; x<=1; ++x) {
+        ivec3 c = clamp(base + ivec3(x,y,z), ivec3(0), u_grid-1);
+        vec3 w = mix(vec3(1.0)-f, f, vec3(x,y,z));
+        result += grid_velocity_old[grid_index(c)].xyz * (w.x*w.y*w.z);
+    }
+    return result;
+}
+
+void collide_cylinder(inout vec3 position, inout vec3 velocity, vec2 center, float top) {
+    if (position.y < -2.3 || position.y > top) return;
+    vec2 delta = position.xz - center;
+    float distance = length(delta);
+    const float radius = 0.43;
+    if (distance < radius && distance > 0.0001) {
+        vec2 normal = delta / distance;
+        position.xz = center + normal * radius;
+        float inward = dot(velocity.xz, normal);
+        if (inward < 0.0) velocity.xz -= normal * inward * 1.55;
+    }
+}
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= uint(u_particle_count)) return;
+    Particle particle = particles_in[id];
+    vec3 pic_velocity = sample_new(particle.position.xyz);
+    vec3 flip_velocity = particle.velocity.xyz + pic_velocity - sample_old(particle.position.xyz);
+    vec3 velocity = mix(pic_velocity, flip_velocity, 0.94);
+    velocity *= exp(-0.035 * u_dt);
+    vec3 position = particle.position.xyz + velocity * u_dt;
+
+    for (int i = 0; i < 5; ++i)
+        collide_cylinder(position, velocity,
+                         vec2(-2.2 + float(i) * 1.1, sin(float(i) * 1.35) * 0.48),
+                         -0.1 + float(i) * 0.52);
+
+    vec3 domain_max = u_domain_min + vec3(u_grid) * u_dx;
+    float margin = max(0.08, u_dx * 0.34);
+    if (position.x < u_domain_min.x + margin) { position.x = u_domain_min.x + margin; velocity.x = abs(velocity.x) * 0.18; }
+    if (position.x > domain_max.x - margin) { position.x = domain_max.x - margin; velocity.x = -abs(velocity.x) * 0.18; }
+    if (position.y < u_domain_min.y + margin) { position.y = u_domain_min.y + margin; velocity.y = abs(velocity.y) * 0.10; }
+    if (position.y > domain_max.y - margin) { position.y = domain_max.y - margin; velocity.y = -abs(velocity.y) * 0.10; }
+    if (position.z < u_domain_min.z + margin) { position.z = u_domain_min.z + margin; velocity.z = abs(velocity.z) * 0.18; }
+    if (position.z > domain_max.z - margin) { position.z = domain_max.z - margin; velocity.z = -abs(velocity.z) * 0.18; }
+
+    particles_out[id].position = vec4(position, 1.0);
+    particles_out[id].velocity = vec4(velocity, length(velocity));
+}

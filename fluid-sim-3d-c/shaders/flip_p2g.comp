@@ -1,0 +1,41 @@
+#version 430 core
+
+layout(local_size_x = 256) in;
+
+struct Particle { vec4 position; vec4 velocity; };
+layout(std430, binding = 0) readonly buffer Particles { Particle particles[]; };
+layout(std430, binding = 2) buffer GridAccum { ivec4 accum[]; };
+
+uniform int u_particle_count;
+uniform ivec3 u_grid;
+uniform vec3 u_domain_min;
+uniform float u_dx;
+const float WEIGHT_SCALE = 4096.0;
+const float MOMENTUM_SCALE = 1024.0;
+
+int grid_index(ivec3 c) { return (c.z * u_grid.y + c.y) * u_grid.x + c.x; }
+
+void main() {
+    uint particle_id = gl_GlobalInvocationID.x;
+    if (particle_id >= uint(u_particle_count)) return;
+    Particle particle = particles[particle_id];
+    vec3 grid_position = (particle.position.xyz - u_domain_min) / u_dx - vec3(0.5);
+    ivec3 base = ivec3(floor(grid_position));
+    vec3 fraction = fract(grid_position);
+    for (int z = 0; z <= 1; ++z) {
+        for (int y = 0; y <= 1; ++y) {
+            for (int x = 0; x <= 1; ++x) {
+                ivec3 cell = base + ivec3(x, y, z);
+                if (any(lessThan(cell, ivec3(0))) || any(greaterThanEqual(cell, u_grid))) continue;
+                vec3 side = vec3(x, y, z);
+                vec3 weights = mix(vec3(1.0) - fraction, fraction, side);
+                float weight = weights.x * weights.y * weights.z;
+                int id = grid_index(cell);
+                atomicAdd(accum[id].x, int(round(particle.velocity.x * weight * MOMENTUM_SCALE)));
+                atomicAdd(accum[id].y, int(round(particle.velocity.y * weight * MOMENTUM_SCALE)));
+                atomicAdd(accum[id].z, int(round(particle.velocity.z * weight * MOMENTUM_SCALE)));
+                atomicAdd(accum[id].w, int(round(weight * WEIGHT_SCALE)));
+            }
+        }
+    }
+}
