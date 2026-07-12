@@ -26,6 +26,7 @@
 | 빌드 도구 | GNU Make 4.4.1 |
 | 네이티브 GUI | Win32 API, GDI |
 | 실시간 그래픽스 | WGL, OpenGL 3.3/4.3/4.6 경로 |
+| 실시간 오디오 | WASAPI `IAudioClient3`, 48 kHz stereo, 현재 최소 주기 128 frame |
 | 병렬 계산 | OpenMP, OpenGL compute shader |
 | 현재 검증 GPU | NVIDIA GeForce RTX 3060 Ti 8GB |
 
@@ -45,6 +46,7 @@ make run
 |---|---|---|---|---:|---|
 | [rotating-cube-c](rotating-cube-c/README.md) | 콘솔 ASCII 3D | C17 | 3축 회전, 원근 투영, 문자 프레임버퍼, Z-buffer, ANSI 제어 | 2/5 | 완결된 소형 학습 예제 |
 | [rotating-cube-cpp](rotating-cube-cpp/README.md) | 콘솔 ASCII 3D | C++20 | C 버전과 같은 수학, RAII, `std::array`, 구조적 바인딩, 원자 종료 상태 | 2/5 | C/C++ 설계 비교 예제 |
+| [keyboard-piano-cpp](keyboard-piano-cpp/README.md) | 콘솔 Piano·Drum 악기 | C++23 | WASAPI 저지연 출력, 다성·타악 합성, ADSR, noise filtering, stereo reverb | 3/5 | 외부 음원 없는 연주 가능한 신시사이저 |
 | [double-pendulum-c](double-pendulum-c/README.md) | Win32/GDI 물리 GUI | C17 | 결합 비선형 ODE, RK4, 카오스, GDI 이중 버퍼링 | 3/5 | 상호작용 가능한 수치 시뮬레이션 |
 | [fluid-sim-c](fluid-sim-c/README.md) | Win32/GDI 2D 유동 | C17 | Stable Fluids 계열, 이류·확산·압력 투영, 격자 경계 | 3/5 | CPU 유체 알고리즘 학습기 |
 | [ray-tracer-c](ray-tracer-c/README.md) | CPU 오프라인 렌더러 | C17 | 광선 교차, 재귀 반사, hard shadow, Blinn-Phong, supersampling | 3/5 | 소형 Whitted-style 레이트레이서 |
@@ -65,6 +67,12 @@ make run
 #### rotating-cube-cpp
 
 같은 시각 결과를 C++20의 값 타입과 자원 수명 관리 방식으로 다시 구성한 비교 프로젝트다. `Terminal`의 생성자·소멸자가 커서 표시 상태를 복구하고, `CubeRenderer`가 화면과 깊이 버퍼를 소유한다. 알고리즘 차이보다 C와 C++의 표현력·불변식·소유권 차이를 보는 프로젝트다.
+
+### 오디오와 음악
+
+#### keyboard-piano-cpp
+
+컴퓨터 키보드의 17개 키를 반음 단위 건반으로 사용하거나 `Tab`으로 여덟 패드의 Drum Kit을 연주하며 최대 48개 voice를 동시에 합성한다. Windows 10 이상의 `IAudioClient3` 공유 모드에서 장치가 허용하는 최소 engine period를 요청하고 MMCSS `Pro Audio` 스레드가 event-driven buffer를 채운다. 네 Piano 음색의 ADSR·부분음 합성뿐 아니라 kick pitch sweep, snare·clap noise burst, hi-hat·crash 비정수 금속 공진과 choke를 직접 계산하며 FFmpeg나 외부 음원은 필요하지 않다.
 
 ### 수치 계산과 물리
 
@@ -102,6 +110,7 @@ OpenGL 없이 CPU가 720×405 영상을 직접 계산한다. 구와 평면의 �
 |---|---|---|
 | C·C++ 언어 | 구조체, 포인터, 동적 메모리, 콜백, RAII, STL 컨테이너, 원자 상태 | 전체, 특히 두 rotating cube |
 | 운영체제·GUI | Win32 창 클래스, 메시지 루프, 입력, 타이머, GDI 자원 수명 | GUI 프로젝트 전체 |
+| 실시간 오디오·DSP | WASAPI, PCM, 다성 voice, 12평균율, ADSR, additive·타악 합성, noise filter, reverb, limiter | keyboard-piano-cpp |
 | 선형대수 | 벡터, 내적, 정규화, 회전·뷰·투영 행렬, 좌표계 변환 | cube, shooter, ray tracer, 3D fluid |
 | 수치해석 | RK4, Gauss-Seidel/Jacobi 반복, semi-Lagrangian 이류, 고정 시간 간격 | pendulum, fluid 프로젝트 |
 | 충돌·기하 | 원·구, AABB, ray-sphere, ray-plane, ray-AABB, 경계 투영 | shooter, ray tracer, MPM |
@@ -149,6 +158,7 @@ OpenGL 없이 CPU가 720×405 영상을 직접 계산한다. 구와 평면의 �
 ## 공통 참고 자료
 
 - [Microsoft: Windows messages and message queues](https://learn.microsoft.com/en-us/windows/win32/winmsg/about-messages-and-message-queues)
+- [Microsoft: Low Latency Audio](https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/low-latency-audio)
 - [Khronos OpenGL Registry](https://registry.khronos.org/OpenGL/index_gl.php)
 - [OpenGL 4.6 core reference pages](https://registry.khronos.org/OpenGL-Refpages/gl4/html/start.html)
 - [ECMA-48 terminal control functions](https://ecma-international.org/publications-and-standards/standards/ecma-48/)

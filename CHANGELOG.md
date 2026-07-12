@@ -6,6 +6,18 @@
 
 ## 2026-07-12
 
+### keyboard-piano-cpp
+
+- C++23, Win32 keyboard polling과 WASAPI `IAudioClient3`를 사용하는 콘솔 피아노 프로젝트를 추가했다.
+- 장치의 최소 공유 engine period를 사용하는 event-driven 오디오 스레드와 MMCSS `Pro Audio` 우선순위를 구성했다.
+- 17개 반음 건반, 최대 48음 폴리포니, sustain, 옥타브·볼륨 조절과 네 가지 절차적 합성 음색을 구현했다.
+- 악기별 envelope와 부분음 합성, stereo Schroeder 계열 reverb, soft limiter 및 float32·PCM 출력 변환을 추가했다.
+- 기존 Piano를 유지하면서 `Tab`으로 전환하는 8-pad `Drum Kit` 모드를 추가하고 현재 모드와 입력을 콘솔 HUD에 표시했다.
+- Kick·Tom pitch envelope, Snare resonant body와 filtered noise, 다중 burst Clap, 비정수 금속 공진 기반 Hi-hat·Crash를 one-shot voice로 합성한다.
+- Piano sustain·release와 drum tail이 같은 48개 voice pool에서 겹치며, Closed/Open Hat 재타격에는 35ms choke를 적용한다.
+- 짧은 Piano `Pressed` 상태가 이전 Drum Kit 문자열의 뒷부분을 남기던 콘솔 잔상을 줄 단위 ANSI 지우기로 수정했다.
+- `make check`로 기본 오디오 endpoint와 실제 sample rate·period를 검증할 수 있게 했다.
+
 ### 저장소 문서 체계
 
 - 저장소 목적, 개발 환경, 전체 프로젝트 카탈로그와 공통 기술 상태를 설명하는 루트 `README.md`를 만들었다.
