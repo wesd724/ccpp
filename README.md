@@ -45,6 +45,7 @@ make run
 | 프로젝트 | 분야·형태 | 언어·표준 | 핵심 기술과 개념 | 난이도 | 현재 성격 |
 |---|---|---|---|---:|---|
 | [rotating-cube-c](rotating-cube-c/README.md) | 콘솔 ASCII 3D | C17 | 3축 회전, 원근 투영, 문자 프레임버퍼, Z-buffer, ANSI 제어 | 2/5 | 완결된 소형 학습 예제 |
+| [conways-game-of-life-c](conways-game-of-life-c/README.md) | 콘솔 셀룰러 오토마타 | C23 | B3/S23, Moore 이웃, 동시 이중 버퍼, 토러스 경계, ANSI 편집 UI | 2/5 | 상호작용 가능한 생명 게임 실험기 |
 | [rotating-cube-cpp](rotating-cube-cpp/README.md) | 콘솔 ASCII 3D | C++20 | C 버전과 같은 수학, RAII, `std::array`, 구조적 바인딩, 원자 종료 상태 | 2/5 | C/C++ 설계 비교 예제 |
 | [keyboard-piano-cpp](keyboard-piano-cpp/README.md) | 콘솔 Piano·Drum 악기 | C++23 | WASAPI 저지연 출력, 다성·타악 합성, ADSR, noise filtering, stereo reverb | 3/5 | 외부 음원 없는 연주 가능한 신시사이저 |
 | [double-pendulum-c](double-pendulum-c/README.md) | Win32/GDI 물리 GUI | C17 | 결합 비선형 ODE, RK4, 카오스, GDI 이중 버퍼링 | 3/5 | 상호작용 가능한 수치 시뮬레이션 |
@@ -67,6 +68,12 @@ make run
 #### rotating-cube-cpp
 
 같은 시각 결과를 C++20의 값 타입과 자원 수명 관리 방식으로 다시 구성한 비교 프로젝트다. `Terminal`의 생성자·소멸자가 커서 표시 상태를 복구하고, `CubeRenderer`가 화면과 깊이 버퍼를 소유한다. 알고리즘 차이보다 C와 C++의 표현력·불변식·소유권 차이를 보는 프로젝트다.
+
+### 셀룰러 오토마타
+
+#### conways-game-of-life-c
+
+콘웨이의 `B3/S23` 규칙을 유한 격자에서 동시에 갱신하고 ANSI 콘솔에 실시간 표시한다. Block, Blinker, Glider, Pulsar와 Gosper glider gun을 커서 위치에 배치할 수 있으며 셀 편집, 한 세대 진행, 1~60 generation/s 속도 조절과 죽은 외부·토러스 경계를 지원한다. 생명 규칙, 패턴과 크기 변경은 터미널 프런트엔드와 분리되어 자동 테스트된다.
 
 ### 오디오와 음악
 
@@ -109,6 +116,7 @@ OpenGL 없이 CPU가 720×405 영상을 직접 계산한다. 구와 평면의 �
 | 영역 | 현재 다루는 내용 | 관련 프로젝트 |
 |---|---|---|
 | C·C++ 언어 | 구조체, 포인터, 동적 메모리, 콜백, RAII, STL 컨테이너, 원자 상태 | 전체, 특히 두 rotating cube |
+| 이산수학·셀룰러 오토마타 | B3/S23, Moore 이웃, 동시 상태 전이, 정지물·진동자·우주선, 토러스 | conways-game-of-life-c |
 | 운영체제·GUI | Win32 창 클래스, 메시지 루프, 입력, 타이머, GDI 자원 수명 | GUI 프로젝트 전체 |
 | 실시간 오디오·DSP | WASAPI, PCM, 다성 voice, 12평균율, ADSR, additive·타악 합성, noise filter, reverb, limiter | keyboard-piano-cpp |
 | 선형대수 | 벡터, 내적, 정규화, 회전·뷰·투영 행렬, 좌표계 변환 | cube, shooter, ray tracer, 3D fluid |
