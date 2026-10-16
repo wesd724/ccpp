@@ -9,7 +9,7 @@ C와 Win32/GDI로 구현한 CPU 2D 격자 유동 시뮬레이션이다. Jos Stam
 | 항목 | 내용 |
 |---|---|
 | 분야 | 계산유체역학 입문, 수치 PDE, Win32 GUI |
-| 언어 | C17 |
+| 언어 | C23 |
 | 플랫폼·API | Windows desktop, Win32, GDI |
 | 격자 | 내부 160×100, 경계용 ghost cell 포함 162×102 |
 | 상태 | 밀도 2개, X·Y 속도 성분 각 2개 |
@@ -108,6 +108,8 @@ source 위치의 값을 주변 네 셀에서 bilinear interpolation해 현재 �
 
 마우스 위치를 격자 좌표로 바꾸고 반경 약 4.5셀의 원형 falloff를 적용한다. 마우스 이동량 `dx`, `dy`는 속도에, 고정 세기는 밀도에 더한다. 따라서 클릭만 유지하면 색이 계속 추가되고, 빠르게 끌수록 강한 유동이 생긴다.
 
+좌표 변환은 현재 client 크기를 사용한다. 가장자리에서는 7×7 브러시를 내부 격자에 잘라 적용해 ghost cell이나 배열 밖에 쓰지 않는다. 이동량은 마지막 물리 tick 이후의 누적 변위를 한 번만 소비하므로 마우스를 멈췄을 때 같은 속도를 반복 주입하지 않는다. 포커스나 capture를 잃으면 드래그를 취소한다.
+
 표시 색은 물리적 스펙트럼이 아니다. 밀도를 보라·파랑 계열로 매핑하고 속력이 큰 곳에 빨강·초록 성분을 더한 뒤 간단한 vignette를 곱한 시각화다.
 
 ## Win32 구조
@@ -127,13 +129,13 @@ source 위치의 값을 주변 네 셀에서 bilinear interpolation해 현재 �
 - semi-Lagrangian 이류의 수치 확산으로 작은 와류가 빠르게 사라진다.
 - 압력 residual, divergence norm, 질량 보존 오차를 측정하지 않는다.
 - timer와 고정 `dt`가 현실 시간과 동기화되지 않는다.
-- 창을 resize해도 마우스 좌표 변환은 초기 960×600을 가정하므로 주입 위치가 어긋날 수 있다.
+- 비정방형 격자의 방향별 확산·투영 계수에 대한 수치 정확도 검증은 아직 별도 과제다.
 - UI thread에서 모든 계산을 수행하며 OpenMP/SIMD 최적화가 없다.
 - 장애물, 온도, 부력, vorticity confinement와 경계 편집이 없다.
 
 ## 개선 로드맵
 
-1. 실제 client size 기반 정확한 마우스-격자 좌표 변환
+1. 비정방형 격자의 방향별 격자 간격을 일관되게 적용하는 수치 모델 검증
 2. fixed-step accumulator와 일시정지·single-step 기능
 3. divergence와 밀도 총량 측정 및 테스트
 4. MacCormack/BFECC 이류 또는 vorticity confinement로 세부 보존
@@ -143,6 +145,8 @@ source 위치의 값을 주변 네 셀에서 bilinear interpolation해 현재 �
 8. 3D 자유 수면 문제는 [fluid-sim-3d-c](../fluid-sim-3d-c/README.md)와 역할을 분리해 발전
 
 ## 참고 자료
+
+저장소 루트의 `make check`는 모서리·창 바깥 드래그의 메모리 guard, ghost cell 보존, 이동량 소비, resize와 capture 취소를 검사한다. [공통 테스트](../tests/README.md)를 참고한다.
 
 - [Jos Stam, Stable Fluids](https://graphics.stanford.edu/courses/cs448-01-spring/papers/stam.pdf)
 - [Microsoft: StretchDIBits](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-stretchdibits)

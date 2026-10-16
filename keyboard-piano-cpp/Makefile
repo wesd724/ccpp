@@ -15,7 +15,7 @@ all: $(TARGET)
 $(TARGET): $(OBJECTS)
 	$(CXX) -o $@ $^ $(LDLIBS)
 
-build/%.o: src/%.cpp
+build/%.o: src/%.cpp Makefile
 	mkdir -p build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
 

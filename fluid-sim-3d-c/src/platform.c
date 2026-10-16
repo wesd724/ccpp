@@ -74,8 +74,23 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
         input->wheel_delta += (float)GET_WHEEL_DELTA_WPARAM(wparam) / (float)WHEEL_DELTA;
         return 0;
     case WM_CAPTURECHANGED:
+        input->mouse_released |= input->mouse_down;
+        input->mouse_pressed = false;
         input->mouse_down = false;
         input->look_down = false;
+        input->mouse_delta_x = 0;
+        input->mouse_delta_y = 0;
+        return 0;
+    case WM_KILLFOCUS:
+        memset(input->keys, 0, sizeof(input->keys));
+        input->mouse_released |= input->mouse_down;
+        input->mouse_pressed = false;
+        input->mouse_down = false;
+        input->look_down = false;
+        input->mouse_delta_x = 0;
+        input->mouse_delta_y = 0;
+        input->wheel_delta = 0;
+        if (GetCapture() == window) ReleaseCapture();
         return 0;
     case WM_KEYDOWN:
         if (wparam == VK_ESCAPE) input->quit = true;
@@ -92,6 +107,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
 static HGLRC create_modern_context(HDC device) {
     HGLRC temporary = wglCreateContext(device);
     if (!temporary || !wglMakeCurrent(device, temporary)) {
+        if (temporary) wglDeleteContext(temporary);
         return NULL;
     }
     PROC raw_create_context = wglGetProcAddress("wglCreateContextAttribsARB");

@@ -12,6 +12,7 @@
 #define MAX_DEPTH 4
 #define EPSILON 0.001f
 #define PI 3.14159265358979323846f
+#define RENDER_TIMER_ID 1
 
 typedef struct {
     float x;
@@ -29,6 +30,7 @@ typedef struct {
     float diffuse;
     float specular;
     float reflective;
+    bool checkerboard;
 } Material;
 
 typedef struct {
@@ -54,18 +56,19 @@ typedef struct {
 static HWND window_handle;
 static uint32_t pixels[IMAGE_WIDTH * IMAGE_HEIGHT];
 static bool rendered = false;
+static int render_row = 0;
 
 static const Sphere spheres[] = {
-    {{-1.55f, 0.75f, -4.2f}, 0.75f, {{0.95f, 0.28f, 0.18f}, 0.85f, 0.45f, 0.16f}},
-    {{0.20f, 1.00f, -5.1f}, 1.00f, {{0.25f, 0.70f, 1.00f}, 0.82f, 0.70f, 0.34f}},
-    {{1.95f, 0.62f, -4.0f}, 0.62f, {{0.95f, 0.78f, 0.26f}, 0.75f, 0.55f, 0.22f}},
-    {{-0.90f, 0.42f, -2.85f}, 0.42f, {{0.75f, 0.95f, 0.58f}, 0.80f, 0.38f, 0.10f}},
+    {{-1.55f, 0.75f, -4.2f}, 0.75f, {{0.95f, 0.28f, 0.18f}, 0.85f, 0.45f, 0.16f, false}},
+    {{0.20f, 1.00f, -5.1f}, 1.00f, {{0.25f, 0.70f, 1.00f}, 0.82f, 0.70f, 0.34f, false}},
+    {{1.95f, 0.62f, -4.0f}, 0.62f, {{0.95f, 0.78f, 0.26f}, 0.75f, 0.55f, 0.22f, false}},
+    {{-0.90f, 0.42f, -2.85f}, 0.42f, {{0.75f, 0.95f, 0.58f}, 0.80f, 0.38f, 0.10f, false}},
 };
 
 static const Plane floor_plane = {
     {0.0f, 0.0f, 0.0f},
     {0.0f, 1.0f, 0.0f},
-    {{0.82f, 0.82f, 0.78f}, 0.92f, 0.18f, 0.08f},
+    {{0.82f, 0.82f, 0.78f}, 0.92f, 0.18f, 0.08f, true},
 };
 
 static Vec3 light_pos = {-2.4f, 5.6f, -1.2f};
@@ -248,7 +251,7 @@ static Vec3 trace_ray(Ray ray, int depth)
     }
 
     Vec3 material_color = hit.material.color;
-    if (fabsf(hit.normal.y - 1.0f) < 0.001f) {
+    if (hit.material.checkerboard) {
         material_color = floor_pattern(hit.point, material_color);
     }
 
@@ -287,8 +290,8 @@ static Ray camera_ray(float u, float v)
     float viewport_width = aspect * viewport_height;
 
     Vec3 forward = normalize(sub(vec3(0.0f, 0.85f, -4.2f), camera_pos));
-    Vec3 right = normalize(vec3(forward.z, 0.0f, -forward.x));
-    Vec3 up = normalize(vec3(-right.z * forward.y, right.x * forward.z - right.z * forward.x, right.x * forward.y));
+    Vec3 right = normalize(vec3(-forward.z, 0.0f, forward.x));
+    Vec3 up = normalize(vec3(-right.z * forward.y, right.z * forward.x - right.x * forward.z, right.x * forward.y));
 
     Vec3 horizontal = mul(right, viewport_width);
     Vec3 vertical = mul(up, viewport_height);
@@ -308,24 +311,30 @@ static void render_image(void)
         {0.75f, 0.75f},
     };
 
-    SetWindowTextA(window_handle, "Ray Tracer - rendering...");
+    if (render_row == 0) {
+        SetWindowTextA(window_handle, "Ray Tracer - rendering...  Esc quit");
+    }
 
-    for (int y = 0; y < IMAGE_HEIGHT; ++y) {
+    // Yield to the message queue between small batches, without a worker thread.
+    const int end_row = render_row + 8 < IMAGE_HEIGHT ? render_row + 8 : IMAGE_HEIGHT;
+    for (int y = render_row; y < end_row; ++y) {
         for (int x = 0; x < IMAGE_WIDTH; ++x) {
             Vec3 color = vec3(0.0f, 0.0f, 0.0f);
             for (int s = 0; s < 4; ++s) {
-                float u = ((float)x + offsets[s][0]) / (float)(IMAGE_WIDTH - 1);
-                float v = 1.0f - (((float)y + offsets[s][1]) / (float)(IMAGE_HEIGHT - 1));
+                float u = ((float)x + offsets[s][0]) / (float)IMAGE_WIDTH;
+                float v = 1.0f - (((float)y + offsets[s][1]) / (float)IMAGE_HEIGHT);
                 color = add(color, trace_ray(camera_ray(u, v), MAX_DEPTH));
             }
             color = mul(color, 0.25f);
             pixels[y * IMAGE_WIDTH + x] = pack_bgra(color);
         }
-
-        if ((y % 24) == 0) {
-            InvalidateRect(window_handle, NULL, FALSE);
-            UpdateWindow(window_handle);
-        }
+    }
+    render_row = end_row;
+    InvalidateRect(window_handle, NULL, FALSE);
+    UpdateWindow(window_handle);
+    if (render_row < IMAGE_HEIGHT) {
+        SetTimer(window_handle, RENDER_TIMER_ID, 1, NULL);
+        return;
     }
 
     rendered = true;
@@ -352,7 +361,12 @@ static void save_ppm(void)
         fwrite(rgb, 1, 3, file);
     }
 
-    fclose(file);
+    const bool write_failed = ferror(file) != 0;
+    const int close_result = fclose(file);
+    if (write_failed || close_result != 0) {
+        MessageBoxA(window_handle, "Could not finish writing ray_tracer_output.ppm", "Ray Tracer", MB_ICONERROR);
+        return;
+    }
     MessageBoxA(window_handle, "Saved ray_tracer_output.ppm", "Ray Tracer", MB_OK);
 }
 
@@ -396,11 +410,19 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPAR
         render_image();
         return 0;
 
+    case WM_TIMER:
+        if (wparam == RENDER_TIMER_ID) {
+            KillTimer(hwnd, RENDER_TIMER_ID);
+            render_image();
+        }
+        return 0;
+
     case WM_KEYDOWN:
         if (wparam == VK_ESCAPE) {
             DestroyWindow(hwnd);
-        } else if (wparam == 'R') {
+        } else if (wparam == 'R' && rendered && !(lparam & (1L << 30))) {
             rendered = false;
+            render_row = 0;
             PostMessageA(hwnd, WM_APP + 1, 0, 0);
         } else if (wparam == 'S' && rendered) {
             save_ppm();
@@ -416,6 +438,7 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPAR
     }
 
     case WM_DESTROY:
+        KillTimer(hwnd, RENDER_TIMER_ID);
         PostQuitMessage(0);
         return 0;
     }

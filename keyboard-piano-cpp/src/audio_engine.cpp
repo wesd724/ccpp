@@ -573,12 +573,48 @@ enum class SampleEncoding {
     unsupported,
 };
 
+struct PcmQuantizer {
+    double maximum;
+    std::int64_t padding;
+
+    PcmQuantizer(unsigned valid_bits, unsigned container_bits) noexcept
+        : maximum(std::ldexp(1.0, static_cast<int>(valid_bits) - 1) - 1.0),
+          padding(std::int64_t{1} << (container_bits - valid_bits)) {}
+
+    [[nodiscard]] std::int32_t operator()(float value) const noexcept {
+        return static_cast<std::int32_t>(std::llround(
+            static_cast<double>(std::clamp(value, -1.0F, 1.0F)) * maximum) * padding);
+    }
+};
+
 [[nodiscard]] SampleEncoding detect_encoding(const WAVEFORMATEX& format) noexcept {
+    if (format.nChannels == 0 || format.nSamplesPerSec == 0 ||
+        format.wBitsPerSample == 0 || format.wBitsPerSample % 8 != 0 ||
+        static_cast<unsigned>(format.nBlockAlign) !=
+            static_cast<unsigned>(format.nChannels) * (format.wBitsPerSample / 8U)) {
+        return SampleEncoding::unsupported;
+    }
     WORD format_tag = format.wFormatTag;
-    if (format_tag == WAVE_FORMAT_EXTENSIBLE &&
-        format.cbSize >= sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX)) {
+    if (format_tag == WAVE_FORMAT_EXTENSIBLE) {
+        if (format.cbSize < sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX)) {
+            return SampleEncoding::unsupported;
+        }
         const auto& extended = reinterpret_cast<const WAVEFORMATEXTENSIBLE&>(format);
-        format_tag = static_cast<WORD>(extended.SubFormat.Data1);
+        const GUID pcm = {WAVE_FORMAT_PCM, 0, 0x10, {0x80, 0, 0, 0xaa, 0, 0x38, 0x9b, 0x71}};
+        const GUID ieee_float = {WAVE_FORMAT_IEEE_FLOAT, 0, 0x10, {0x80, 0, 0, 0xaa, 0, 0x38, 0x9b, 0x71}};
+        if (IsEqualGUID(extended.SubFormat, pcm)) {
+            format_tag = WAVE_FORMAT_PCM;
+        } else if (IsEqualGUID(extended.SubFormat, ieee_float)) {
+            format_tag = WAVE_FORMAT_IEEE_FLOAT;
+        } else {
+            return SampleEncoding::unsupported;
+        }
+        if (extended.Samples.wValidBitsPerSample == 0 ||
+            extended.Samples.wValidBitsPerSample > format.wBitsPerSample ||
+            (format_tag == WAVE_FORMAT_IEEE_FLOAT &&
+             extended.Samples.wValidBitsPerSample != format.wBitsPerSample)) {
+            return SampleEncoding::unsupported;
+        }
     }
 
     if (format_tag == WAVE_FORMAT_IEEE_FLOAT && format.wBitsPerSample == 32) {
@@ -669,6 +705,10 @@ struct AudioEngine::Impl {
         std::scoped_lock lock(synth_mutex);
         const unsigned channels = format.nChannels;
         const double rate = static_cast<double>(format.nSamplesPerSec);
+        const unsigned valid_bits = format.wFormatTag == WAVE_FORMAT_EXTENSIBLE
+            ? reinterpret_cast<const WAVEFORMATEXTENSIBLE&>(format).Samples.wValidBitsPerSample
+            : format.wBitsPerSample;
+        const PcmQuantizer pcm_sample(valid_bits, format.wBitsPerSample);
 
         for (UINT32 frame_index = 0; frame_index < frame_count; ++frame_index) {
             const auto [left, right] = synthesize_frame(rate);
@@ -686,18 +726,15 @@ struct AudioEngine::Impl {
                 }
                 case SampleEncoding::pcm16: {
                     auto* samples = reinterpret_cast<std::int16_t*>(frame);
-                    samples[0] = static_cast<std::int16_t>(std::lround(
-                        std::clamp(channels == 1 ? mono : left, -1.0F, 1.0F) * 32767.0F));
+                    samples[0] = static_cast<std::int16_t>(pcm_sample(channels == 1 ? mono : left));
                     if (channels >= 2) {
-                        samples[1] = static_cast<std::int16_t>(std::lround(
-                            std::clamp(right, -1.0F, 1.0F) * 32767.0F));
+                        samples[1] = static_cast<std::int16_t>(pcm_sample(right));
                     }
                     break;
                 }
                 case SampleEncoding::pcm24: {
-                    const auto write_sample = [](BYTE* output, float value) {
-                        const auto sample = static_cast<std::int32_t>(std::lround(
-                            std::clamp(value, -1.0F, 1.0F) * 8388607.0F));
+                    const auto write_sample = [&pcm_sample](BYTE* output, float value) {
+                        const auto sample = pcm_sample(value);
                         output[0] = static_cast<BYTE>(sample & 0xFF);
                         output[1] = static_cast<BYTE>((sample >> 8) & 0xFF);
                         output[2] = static_cast<BYTE>((sample >> 16) & 0xFF);
@@ -710,13 +747,9 @@ struct AudioEngine::Impl {
                 }
                 case SampleEncoding::pcm32: {
                     auto* samples = reinterpret_cast<std::int32_t*>(frame);
-                    constexpr double maximum = 2147483647.0;
-                    samples[0] = static_cast<std::int32_t>(std::llround(
-                        static_cast<double>(std::clamp(channels == 1 ? mono : left, -1.0F, 1.0F)) *
-                        maximum));
+                    samples[0] = pcm_sample(channels == 1 ? mono : left);
                     if (channels >= 2) {
-                        samples[1] = static_cast<std::int32_t>(std::llround(
-                            static_cast<double>(std::clamp(right, -1.0F, 1.0F)) * maximum));
+                        samples[1] = pcm_sample(right);
                     }
                     break;
                 }
@@ -988,8 +1021,11 @@ AudioEngine::~AudioEngine() {
 
 bool AudioEngine::start(std::string& error) {
     if (impl_->render_thread.joinable()) {
-        error.clear();
-        return true;
+        if (healthy()) {
+            error.clear();
+            return true;
+        }
+        stop();
     }
 
     {

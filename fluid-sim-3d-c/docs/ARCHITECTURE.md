@@ -57,7 +57,7 @@ Win32/WGL platform
 6. Realtime `GpuFluid`를 즉시 초기화한다.
 7. High Quality FLIP와 MPM은 최초 `H`, `M` 입력까지 지연 초기화한다.
 
-Compute shader는 OpenGL 4.3 이상이 필요하다. context가 3.3에 머물면 기본 raster 기능은 가능해도 GPU FLIP/MPM 초기화는 성공할 수 없다. 현재 검증 환경은 OpenGL 4.6이다.
+Compute shader는 OpenGL 4.3 이상이 필요하다. context 생성에는 3.3 fallback 시도가 남아 있지만 `gl_api_load`가 compute 함수를 시작 시 필수로 읽으므로 현재 애플리케이션은 사실상 OpenGL 4.3 이상이 필요하다. 3.3 장치에서 Preview만 실행하는 기능 분리는 아직 구현하지 않았다. 현재 검증 환경은 OpenGL 4.6이다.
 
 ### 종료 순서
 
@@ -80,6 +80,8 @@ platform_poll
 ```
 
 `G`, `H`, `M`, `F`, `R`은 이전 프레임 key state와 비교해 눌린 순간 한 번만 동작한다. 이동 키와 마우스는 유지 상태로 처리한다.
+
+`WM_KILLFOCUS`에서 키와 마우스 유지 상태·카메라 delta를 지우고 capture를 해제한다. 포커스 또는 capture를 잃기 직전 왼쪽 버튼이 눌려 있었다면 `mouse_released`도 전달해 `PhysicsWorld`가 드래그를 종료하도록 한다. 초기 platform 생성 실패도 `platform_shutdown`으로 정리하며 종료 요청을 받은 poll 뒤에는 추가 update/render를 하지 않는다. 입력 취소 경로는 루트 `make check`에서 hidden Win32 window로 검증한다.
 
 ### 시간 모델
 
@@ -327,7 +329,7 @@ main.c + src/*.c
 | Preview | 60 FPS 목표, VSync 기준 |
 | Realtime FLIP | 60 FPS |
 | High Quality Surface | 약 24~26 FPS, GPU 약 99% |
-| MPM Material Lab | 약 55~60 FPS, GPU 약 92%, GPU memory 약 483 MiB |
+| MPM Material Lab | 과거 약 55~60 FPS, GPU 약 92%; 483 MiB 메모리 기록은 프로세스별 계측 근거가 없어 앱 전용값으로 확정하지 않음 |
 
 측정값은 driver, 창 크기, VSync와 동시에 초기화된 다른 GPU 모드에 따라 달라질 수 있다.
 

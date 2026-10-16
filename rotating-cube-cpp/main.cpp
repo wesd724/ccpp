@@ -1,5 +1,4 @@
 #include <array>
-#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <csignal>
@@ -19,7 +18,7 @@ constexpr float camera_distance = 4.0f;
 constexpr float scale = 28.0f;
 constexpr auto frame_delay = 30ms;
 
-std::atomic_bool running{true};
+volatile std::sig_atomic_t running = 1;
 
 struct Vec3 {
     float x{};
@@ -154,7 +153,7 @@ private:
 
 void stop(int)
 {
-    running = false;
+    running = 0;
 }
 }
 

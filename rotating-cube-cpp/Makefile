@@ -1,12 +1,12 @@
 CXX := g++
-CXXFLAGS := -std=c++20 -Wall -Wextra -pedantic -O2
+CXXFLAGS := -std=c++23 -Wall -Wextra -pedantic -O2
 TARGET := rotating_cube_cpp
 
 .PHONY: all run clean
 
 all: $(TARGET)
 
-$(TARGET): main.cpp
+$(TARGET): main.cpp Makefile
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 run: $(TARGET)

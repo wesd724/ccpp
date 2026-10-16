@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -std=c17 -Wall -Wextra -pedantic -O2
+CFLAGS := -std=c23 -Wall -Wextra -pedantic -O2
 LDLIBS := -lopengl32 -lgdi32 -luser32 -lm
 TARGET := opengl_shooter
 
@@ -7,7 +7,7 @@ TARGET := opengl_shooter
 
 all: $(TARGET)
 
-$(TARGET): main.c
+$(TARGET): main.c ../modern_gl_compat.h Makefile
 	$(CC) $(CFLAGS) -mwindows -o $@ $< $(LDLIBS)
 
 run: $(TARGET)

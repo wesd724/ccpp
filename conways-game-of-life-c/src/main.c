@@ -333,52 +333,58 @@ static void handle_character(App *app, unsigned char key)
     }
 }
 
+static void handle_key(App *app, unsigned char key, double now)
+{
+    if (app->escape_state == 1) {
+        if (key == '[' || key == 'O') {
+            app->escape_state = 2;
+            return;
+        }
+        app->quit = true;
+        app->escape_state = 0;
+        return;
+    }
+    if (app->escape_state == 2) {
+        // CSI parameters (for example Shift+Arrow and F5) are not commands.
+        if (key >= 0x20 && key <= 0x3f) return;
+        switch (key) {
+        case 'A':
+            move_cursor(app, 0, -1);
+            break;
+        case 'B':
+            move_cursor(app, 0, 1);
+            break;
+        case 'C':
+            move_cursor(app, 1, 0);
+            break;
+        case 'D':
+            move_cursor(app, -1, 0);
+            break;
+        default:
+            break;
+        }
+        app->escape_state = 0;
+        return;
+    }
+    if (key == 0x1bU) {
+        app->escape_state = 1;
+        app->escape_started = now;
+        return;
+    }
+    handle_character(app, key);
+}
+
 static void handle_input(App *app)
 {
     unsigned char input[64];
     const size_t count = terminal_read(input, sizeof(input));
     const double now = terminal_now();
     for (size_t i = 0; i < count; ++i) {
-        const unsigned char key = input[i];
-        if (app->escape_state == 1) {
-            if (key == '[') {
-                app->escape_state = 2;
-                continue;
-            }
-            app->quit = true;
-            app->escape_state = 0;
-            continue;
-        }
-        if (app->escape_state == 2) {
-            switch (key) {
-            case 'A':
-                move_cursor(app, 0, -1);
-                break;
-            case 'B':
-                move_cursor(app, 0, 1);
-                break;
-            case 'C':
-                move_cursor(app, 1, 0);
-                break;
-            case 'D':
-                move_cursor(app, -1, 0);
-                break;
-            default:
-                break;
-            }
-            app->escape_state = 0;
-            continue;
-        }
-        if (key == 0x1bU) {
-            app->escape_state = 1;
-            app->escape_started = now;
-            continue;
-        }
-        handle_character(app, key);
+        handle_key(app, input[i], now);
     }
 
     if (app->escape_state != 0 && now - app->escape_started >= 0.05) {
-        app->quit = true;
+        if (app->escape_state == 1) app->quit = true;
         app->escape_state = 0;
     }
 }

@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -std=c17 -Wall -Wextra -pedantic -O2
+CFLAGS := -std=c23 -Wall -Wextra -pedantic -O2
 LDFLAGS := -lm
 TARGET := rotating_cube
 
@@ -7,11 +7,11 @@ TARGET := rotating_cube
 
 all: $(TARGET)
 
-$(TARGET): main.c
+$(TARGET): main.c Makefile
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 run: $(TARGET)
 	./$(TARGET)
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) $(TARGET).exe

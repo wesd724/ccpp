@@ -140,6 +140,10 @@ Piano와 drum은 별도 mixer가 아니라 같은 48개 voice pool과 stereo 합
 
 네 개의 feedback comb filter와 두 개의 all-pass filter를 좌우 길이가 조금 다르게 구성한 Schroeder 계열 stereo reverb를 사용한다. dry signal과 reverb tail을 섞은 뒤 `tanh` soft limiter로 큰 화음의 peak를 제한한다. 출력 장치가 float32, PCM 16·24·32 bit 중 하나이면 해당 형식으로 변환한다.
 
+mix format의 채널 수·sample rate·block alignment와 확장 형식의 전체 SubFormat GUID를 검증한 뒤 buffer를 쓴다. PCM의 valid bit 수가 컨테이너보다 작으면 상위 비트에 정렬하고 나머지 하위 비트는 0으로 채운다. 예를 들어 32-bit 컨테이너 안의 24-bit PCM도 지원한다. 종료된 render thread가 남아 있어도 `start`가 정상 스트림으로 오인하지 않고 정리 후 다시 초기화한다. 기본 장치 변경 시 자동 복구까지 구현한 것은 아니다.
+
+루트 `make check`는 오디오 장치 없이 형식 검증, PCM padding, 네 음색의 유한 파형과 release, 여덟 드럼의 소리 에너지와 tail 종료를 검사한다. 이 프로젝트 내부 `make check`와 루트 `make check-audio`는 별도로 실제 WASAPI 장치를 검사한다. [공통 테스트](../tests/README.md)를 참고한다.
+
 ## 주요 파일
 
 | 파일 | 책임 |
@@ -181,5 +185,6 @@ Piano와 drum은 별도 mixer가 아니라 같은 48개 voice pool과 stereo 합
 - [Microsoft: IAudioClient3](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudioclient3)
 - [Microsoft: IAudioClient3::InitializeSharedAudioStream](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient3-initializesharedaudiostream)
 - [Microsoft: Low Latency Audio](https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/low-latency-audio)
+- [Microsoft: WAVEFORMATEXTENSIBLE](https://learn.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible)
 - [Microsoft: Multimedia Class Scheduler Service](https://learn.microsoft.com/en-us/windows/win32/procthread/multimedia-class-scheduler-service)
 - [Microsoft: GetAsyncKeyState](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getasynckeystate)

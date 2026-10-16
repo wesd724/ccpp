@@ -7,11 +7,11 @@ C, Win32 API와 GDI로 만든 평면 이중 진자 시뮬레이션이다. 두 �
 | 항목 | 내용 |
 |---|---|
 | 분야 | 고전역학, 비선형 동역학, 수치 ODE, Win32 GUI |
-| 언어 | C17 |
+| 언어 | C23 |
 | 플랫폼·API | Windows desktop, Win32 message loop, GDI |
 | 물리 상태 | `theta1`, `theta2`, `omega1`, `omega2` |
 | 수치 적분 | 고정 간격 RK4, 내부 `dt = 0.006` |
-| 표시 주기 | `WM_TIMER` 16ms, timer당 물리 4 substep |
+| 표시 주기 | `WM_TIMER` 16ms, QPC 실측 시간에 따른 고정 물리 substep |
 | 궤적 | 두 번째 추의 최근 900개 화면 위치 |
 | 외부 라이브러리 | 없음, `gdi32`, `user32`, `libm` |
 | 구현 난이도 | 이론 3/5, GUI 2/5 |
@@ -71,7 +71,7 @@ k4 = f(y + dt*k3)
 y_next = y + dt*(k1 + 2k2 + 2k3 + k4)/6
 ```
 
-16ms timer 이벤트마다 네 번 호출하므로 명목상 화면 tick 하나에 시뮬레이션 시간 `0.024s`가 흐른다. timer가 정확히 60Hz라고 가정하면 현실 시간보다 약 1.5배 빠른 설정이다. Win32 timer는 hard real-time clock이 아니므로 실제 창 부하에 따라 표시 간격은 달라질 수 있다.
+`QueryPerformanceCounter`로 실제 경과 시간을 측정해 accumulator에 넣고 `dt=0.006s`만큼씩 적분한다. 평상시에는 현실 시간과 1:1로 진행한다. 창 이동이나 디버깅으로 오래 멈춘 경우 한 번에 최대 0.25초만 따라잡으며 초과 시간은 버린다. 일시정지·초기화 시 잔여 시간도 초기화하고 Space의 키 자동 반복은 무시한다. Win32 timer는 hard real-time clock이 아니므로 표시 간격 자체가 항상 일정한 것은 아니다.
 
 RK4는 이 짧은 시각화에 충분히 정확하지만 symplectic integrator는 아니다. 감쇠가 없는 보존계에서 장시간 실행하면 수치 에너지 drift가 누적될 수 있다.
 
@@ -103,14 +103,14 @@ RK4는 이 짧은 시각화에 충분히 정확하지만 symplectic integrator�
 - 점질량·질량 없는 강체 막대 모델이며 막대 자체 관성은 없다.
 - 공기 저항, 축 마찰, 외력과 충돌이 없다.
 - 장시간 에너지 보존을 별도로 측정하지 않는다.
-- timer 시간과 물리 시간이 분리되어 있어 현실 시간 배속이 정확히 1:1이 아니다.
+- 0.25초보다 긴 지연은 물리 시간을 버려 UI 장기 정지를 방지하므로 정지 구간까지 현실 시간과 일치하지는 않는다.
 - 한 프레임의 궤적 선분마다 GDI pen을 생성·삭제해 불필요한 객체 비용이 있다.
 - 계산과 렌더링이 UI thread에서 실행되며 기록·재생·파라미터 UI가 없다.
 - 창 크기가 작아지면 고정 185픽셀 막대가 잘릴 수 있다.
 
 ## 개선 로드맵
 
-1. 실제 elapsed time accumulator와 고정 물리 step을 분리해 정확한 재생 속도 제공
+1. 물리 step 사이의 렌더 보간과 사용자 배속 조절
 2. 총 에너지·각운동량 그래프와 수치 오차 표시
 3. RK4, symplectic Euler, Verlet 계열 적분기 비교
 4. 질량·길이·중력·감쇠·초기 조건 조절 UI
@@ -119,6 +119,8 @@ RK4는 이 짧은 시각화에 충분히 정확하지만 symplectic integrator�
 7. CSV 상태 기록과 결정적 재생
 
 ## 참고 자료
+
+저장소 루트의 `make check`는 10,000 RK4 step의 에너지 오차, 정지 평형, 실제 시간별 step 수와 일시정지를 검사한다. 테스트 기준과 한계는 [공통 테스트](../tests/README.md)에 있다.
 
 - [myPhysicsLab: Double Pendulum equations and derivation](https://www.myphysicslab.com/pendulum/double-pendulum-en.html)
 - [myPhysicsLab derivation PDF](https://www.myphysicslab.com/develop/docs/Double_Pendulum.pdf)

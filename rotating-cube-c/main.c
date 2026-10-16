@@ -17,6 +17,7 @@
 
 static float zbuffer[WIDTH * HEIGHT];
 static char screen[WIDTH * HEIGHT];
+static volatile sig_atomic_t running = 1;
 
 static void restore_terminal(void)
 {
@@ -27,8 +28,7 @@ static void restore_terminal(void)
 static void handle_signal(int signum)
 {
     (void)signum;
-    restore_terminal();
-    exit(0);
+    running = 0;
 }
 
 static void rotate_point(float x, float y, float z, float ax, float ay, float az,
@@ -162,7 +162,7 @@ int main(void)
     float ay = 0.0f;
     float az = 0.0f;
 
-    while (1) {
+    while (running) {
         render_frame(ax, ay, az);
         ax += 0.045f;
         ay += 0.030f;

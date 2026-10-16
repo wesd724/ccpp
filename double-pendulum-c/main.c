@@ -10,7 +10,6 @@
 #define TIMER_ID 1
 #define TIMER_MS 16
 #define TRAIL_COUNT 900
-#define SUB_STEPS 4
 
 typedef struct {
     double theta1;
@@ -36,6 +35,9 @@ static Point2i trail[TRAIL_COUNT];
 static int trail_head = 0;
 static int trail_size = 0;
 static bool paused = false;
+static double accumulator = 0.0;
+static LARGE_INTEGER clock_frequency;
+static LARGE_INTEGER previous_counter;
 
 static State add_scaled(State a, State b, double scale)
 {
@@ -88,6 +90,24 @@ static void reset_simulation(void)
     state = (State){1.65, 2.35, 0.0, 0.0};
     trail_head = 0;
     trail_size = 0;
+    accumulator = 0.0;
+}
+
+static bool advance_simulation(double elapsed)
+{
+    if (paused) {
+        accumulator = 0.0;
+        return false;
+    }
+    // Bound catch-up after a debugger stop or a long window move.
+    accumulator += fmin(fmax(elapsed, 0.0), 0.25);
+    bool advanced = false;
+    while (accumulator >= dt) {
+        integrate();
+        accumulator -= dt;
+        advanced = true;
+    }
+    return advanced;
 }
 
 static void pendulum_points(RECT rect, Point2i *origin, Point2i *bob1, Point2i *bob2)
@@ -196,15 +216,18 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPAR
 {
     switch (message) {
     case WM_CREATE:
+        QueryPerformanceFrequency(&clock_frequency);
+        QueryPerformanceCounter(&previous_counter);
         SetTimer(hwnd, TIMER_ID, TIMER_MS, NULL);
         return 0;
 
-    case WM_TIMER:
-        if (!paused) {
-            for (int i = 0; i < SUB_STEPS; ++i) {
-                integrate();
-            }
-
+    case WM_TIMER: {
+        LARGE_INTEGER counter;
+        QueryPerformanceCounter(&counter);
+        const double elapsed = (double)(counter.QuadPart - previous_counter.QuadPart)
+            / (double)clock_frequency.QuadPart;
+        previous_counter = counter;
+        if (advance_simulation(elapsed)) {
             RECT rect;
             Point2i origin;
             Point2i bob1;
@@ -215,14 +238,18 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPAR
         }
         InvalidateRect(hwnd, NULL, FALSE);
         return 0;
+    }
 
     case WM_KEYDOWN:
         if (wparam == VK_ESCAPE) {
             DestroyWindow(hwnd);
-        } else if (wparam == ' ') {
+        } else if (wparam == ' ' && !(lparam & (1L << 30))) {
             paused = !paused;
+            accumulator = 0.0;
+            QueryPerformanceCounter(&previous_counter);
         } else if (wparam == 'R') {
             reset_simulation();
+            QueryPerformanceCounter(&previous_counter);
         }
         return 0;
 

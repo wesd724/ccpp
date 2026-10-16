@@ -15,13 +15,13 @@ all: $(TARGET)
 $(TARGET): $(OBJECTS)
 	$(CC) -o $@ $^
 
-build/%.o: src/%.c
+build/%.o: src/%.c Makefile
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
-$(TEST_TARGET): tests/test_life.c src/life.c src/patterns.c
+$(TEST_TARGET): tests/test_life.c src/life.c src/patterns.c include/life.h include/patterns.h Makefile
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $^
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $(filter %.c,$^)
 
 run: $(TARGET)
 	./$(TARGET)

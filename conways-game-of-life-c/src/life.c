@@ -7,7 +7,8 @@
 
 static bool valid_area(size_t width, size_t height, size_t *area)
 {
-    if (width == 0 || height == 0 || width > SIZE_MAX / height) {
+    if (width == 0 || height == 0 || width > PTRDIFF_MAX || height > PTRDIFF_MAX ||
+        width > SIZE_MAX / height) {
         return false;
     }
 

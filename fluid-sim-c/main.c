@@ -38,6 +38,8 @@ static int mouse_x = 0;
 static int mouse_y = 0;
 static int prev_mouse_x = 0;
 static int prev_mouse_y = 0;
+static int client_width = WINDOW_WIDTH;
+static int client_height = WINDOW_HEIGHT;
 static float dt = 0.10f;
 static float diffusion = 0.00004f;
 static float viscosity = 0.00002f;
@@ -184,22 +186,27 @@ static void fade_density(void)
 
 static void inject_at_mouse(void)
 {
-    if (!mouse_down) {
+    if (!mouse_down || client_width <= 0 || client_height <= 0) {
         return;
     }
 
-    int gx = 1 + mouse_x * GRID_W / WINDOW_WIDTH;
-    int gy = 1 + mouse_y * GRID_H / WINDOW_HEIGHT;
-    gx = (int)clamp_float((float)gx, 2.0f, (float)GRID_W - 1.0f);
-    gy = (int)clamp_float((float)gy, 2.0f, (float)GRID_H - 1.0f);
+    int gx = 1 + mouse_x * GRID_W / client_width;
+    int gy = 1 + mouse_y * GRID_H / client_height;
+    gx = (int)clamp_float((float)gx, 1.0f, (float)GRID_W);
+    gy = (int)clamp_float((float)gy, 1.0f, (float)GRID_H);
 
     float dx = (float)(mouse_x - prev_mouse_x);
     float dy = (float)(mouse_y - prev_mouse_y);
+    prev_mouse_x = mouse_x;
+    prev_mouse_y = mouse_y;
 
     for (int y = -3; y <= 3; ++y) {
         for (int x = -3; x <= 3; ++x) {
             int px = gx + x;
             int py = gy + y;
+            if (px < 1 || px > GRID_W || py < 1 || py > GRID_H) {
+                continue;
+            }
             float falloff = 1.0f - sqrtf((float)(x * x + y * y)) / 4.5f;
             if (falloff > 0.0f) {
                 density[IX(px, py)] += 70.0f * falloff;
@@ -321,6 +328,20 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPAR
         InvalidateRect(hwnd, NULL, FALSE);
         return 0;
 
+    case WM_SIZE:
+        client_width = LOWORD(lparam);
+        client_height = HIWORD(lparam);
+        return 0;
+
+    case WM_KILLFOCUS:
+        if (GetCapture() == hwnd) ReleaseCapture();
+        mouse_down = false;
+        return 0;
+
+    case WM_CAPTURECHANGED:
+        mouse_down = false;
+        return 0;
+
     case WM_LBUTTONDOWN:
         mouse_down = true;
         mouse_x = prev_mouse_x = GET_X_LPARAM(lparam);
@@ -334,8 +355,6 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPAR
         return 0;
 
     case WM_MOUSEMOVE:
-        prev_mouse_x = mouse_x;
-        prev_mouse_y = mouse_y;
         mouse_x = GET_X_LPARAM(lparam);
         mouse_y = GET_Y_LPARAM(lparam);
         return 0;
@@ -372,6 +391,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comman
 
     if (!allocate_simulation()) {
         MessageBoxA(NULL, "Failed to allocate simulation memory.", "Fluid Simulation", MB_ICONERROR);
+        free_simulation();
         return 1;
     }
 

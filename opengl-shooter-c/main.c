@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <windows.h>
 
@@ -65,6 +66,8 @@ static HGLRC render_context;
 static bool running = true;
 static bool keys[256];
 static bool mouse_down = false;
+static int client_width = WINDOW_WIDTH;
+static int client_height = WINDOW_HEIGHT;
 static Vec2 mouse_pos = {WINDOW_WIDTH * 0.5f, WINDOW_HEIGHT * 0.5f};
 
 static Vec2 player_pos = {WINDOW_WIDTH * 0.5f, WINDOW_HEIGHT - 90.0f};
@@ -125,7 +128,8 @@ static float distance_between(Vec2 a, Vec2 b)
 
 static bool key_is_down(int key)
 {
-    return keys[key] || (GetAsyncKeyState(key) & 0x8000) != 0;
+    return key >= 0 && key < 256 && GetForegroundWindow() == window_handle
+        && (keys[key] || (GetAsyncKeyState(key) & 0x8000) != 0);
 }
 
 static void reset_game(void)
@@ -225,6 +229,7 @@ static void update_title(float dt)
 
 static void update_game(float dt)
 {
+    if (GetForegroundWindow() != window_handle) return;
     if (dt > 0.05f) {
         dt = 0.05f;
     }
@@ -304,7 +309,8 @@ static void update_game(float dt)
     for (int i = 0; i < MAX_ENEMIES; ++i) {
         if (enemies[i].active) {
             const Vec2 chase = vec_normalize(vec_sub(player_pos, enemies[i].pos));
-            enemies[i].vel = vec_add(vec_scale(enemies[i].vel, 0.95f), vec_scale(chase, enemies[i].speed * 0.05f));
+            const float smoothing = 1.0f - powf(0.95f, dt * 60.0f);
+            enemies[i].vel = vec_add(vec_scale(enemies[i].vel, 1.0f - smoothing), vec_scale(chase, enemies[i].speed * smoothing));
             enemies[i].pos = vec_add(enemies[i].pos, vec_scale(enemies[i].vel, dt));
             enemies[i].spin += dt * 4.0f;
 
@@ -351,7 +357,7 @@ static void update_game(float dt)
         if (particles[i].active) {
             particles[i].life -= dt;
             particles[i].pos = vec_add(particles[i].pos, vec_scale(particles[i].vel, dt));
-            particles[i].vel = vec_scale(particles[i].vel, 0.98f);
+            particles[i].vel = vec_scale(particles[i].vel, powf(0.98f, dt * 60.0f));
             if (particles[i].life <= 0.0f) {
                 particles[i].active = false;
             }
@@ -445,7 +451,7 @@ static void draw_background(void)
 
 static void render_game(void)
 {
-    glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+    glViewport(0, 0, client_width, client_height);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     glOrtho(0.0, WINDOW_WIDTH, WINDOW_HEIGHT, 0.0, -1.0, 1.0);
@@ -525,6 +531,7 @@ static bool initialize_opengl(HWND hwnd)
 static void shutdown_opengl(void)
 {
     if (render_context != NULL) {
+        mgl_shutdown();
         wglMakeCurrent(NULL, NULL);
         wglDeleteContext(render_context);
         render_context = NULL;
@@ -544,7 +551,23 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPAR
 
     case WM_DESTROY:
         running = false;
+        shutdown_opengl();
         PostQuitMessage(0);
+        return 0;
+
+    case WM_KILLFOCUS:
+        memset(keys, 0, sizeof(keys));
+        mouse_down = false;
+        if (GetCapture() == hwnd) ReleaseCapture();
+        return 0;
+
+    case WM_CAPTURECHANGED:
+        mouse_down = false;
+        return 0;
+
+    case WM_SIZE:
+        client_width = LOWORD(lparam);
+        client_height = HIWORD(lparam);
         return 0;
 
     case WM_KEYDOWN:
@@ -575,8 +598,10 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPAR
         return 0;
 
     case WM_MOUSEMOVE:
-        mouse_pos.x = (float)GET_X_LPARAM(lparam);
-        mouse_pos.y = (float)GET_Y_LPARAM(lparam);
+        if (client_width > 0 && client_height > 0) {
+            mouse_pos.x = (float)GET_X_LPARAM(lparam) * WINDOW_WIDTH / client_width;
+            mouse_pos.y = (float)GET_Y_LPARAM(lparam) * WINDOW_HEIGHT / client_height;
+        }
         return 0;
     }
 
@@ -636,6 +661,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comman
     }
 
     if (!initialize_opengl(window_handle)) {
+        shutdown_opengl();
         MessageBoxA(window_handle, "OpenGL initialization failed.", "OpenGL Shooter", MB_ICONERROR);
         return 1;
     }
@@ -651,6 +677,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comman
             TranslateMessage(&message);
             DispatchMessageA(&message);
         }
+        if (!running) break;
 
         const double now = perf_seconds();
         const float dt = (float)(now - previous_time);

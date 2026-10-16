@@ -1,16 +1,16 @@
 # rotating-cube-cpp
 
-C++20과 콘솔 문자로 회전하는 3D 큐브를 그린다. [C 구현](../rotating-cube-c/README.md)과 같은 수학·출력 방식을 유지하면서, 값 타입, 클래스, RAII와 표준 라이브러리로 상태와 자원 수명을 표현하는 방법을 비교한다.
+C++23과 콘솔 문자로 회전하는 3D 큐브를 그린다. [C 구현](../rotating-cube-c/README.md)과 같은 수학·출력 방식을 유지하면서, 값 타입, 클래스, RAII와 표준 라이브러리로 상태와 자원 수명을 표현하는 방법을 비교한다.
 
 ## 프로젝트 정보
 
 | 항목 | 내용 |
 |---|---|
 | 분야 | 콘솔 그래픽스, 3D 수학, C/C++ 설계 비교 |
-| 언어 | C++20 |
+| 언어 | C++23 |
 | 플랫폼 | Cygwin 또는 ANSI/ECMA-48 제어 시퀀스를 지원하는 터미널 |
 | 외부 라이브러리 | 없음 |
-| 주요 표준 라이브러리 | `array`, `atomic`, `chrono`, `thread`, `iostream` |
+| 주요 표준 라이브러리 | `array`, `csignal`, `chrono`, `thread`, `iostream` |
 | 출력 | 80×40 문자 프레임, 목표 간격 30ms |
 | 구현 난이도 | 2/5 |
 | 주요 파일 | [main.cpp](main.cpp), [Makefile](Makefile) |
@@ -54,7 +54,7 @@ make run
 - `std::array::fill`을 이용한 고정 배열 초기화
 - `std::chrono_literals`의 `30ms`
 - `std::this_thread::sleep_for`
-- `std::atomic_bool` 실행 상태
+- signal handler에서 변경 가능한 `volatile std::sig_atomic_t` 실행 상태
 - `const auto [point, shade]` 구조적 바인딩
 - `[[nodiscard]]`로 변환 결과 무시 방지
 - 익명 namespace로 번역 단위 내부 심볼 제한
@@ -71,7 +71,7 @@ make run
 | 점 반환 | 출력 포인터 3개 | `Vec3` 값 반환 |
 | 터미널 복구 | `atexit` 함수 | RAII 소멸자 |
 | 시간 | POSIX `nanosleep` | `std::chrono`, `std::thread` |
-| 실행 상태 | 무한 루프와 signal 종료 | atomic 실행 플래그 |
+| 실행 상태 | `volatile sig_atomic_t` 종료 플래그 | `volatile std::sig_atomic_t` 종료 플래그 |
 | 고정 배열 | C 배열 | `std::array` |
 
 두 구현의 화질 차이는 언어 때문이 아니라 `SURFACE_STEP` 값 차이 때문이다. C++이 자동으로 더 빠르거나 더 선명한 것은 아니다.
@@ -83,11 +83,11 @@ make run
 - `std::cout` 전체 프레임 출력은 고성능 terminal renderer가 아니다.
 - 목표 30ms 지연에 렌더 시간이 추가되어 정확한 고정 FPS가 아니다.
 - 비정상 강제 종료에서는 RAII 소멸자가 실행되지 않아 커서가 숨은 채 남을 수 있다.
-- 현재 C++20으로 빌드하며 C++23 전환과 그에 맞는 기능 사용은 아직 하지 않았다.
+- C++23 모드로 빌드하지만 새 표준 기능을 쓰기 위한 불필요한 알고리즘 변경은 하지 않는다.
 
 ## 개선 로드맵
 
-1. C++23 빌드 검증과 표준 기능 적용 여부 결정
+1. C++23 빌드 검증을 유지하고 실제 필요에 따라 표준 기능 적용
 2. 동적 terminal 크기와 `std::vector` 프레임버퍼
 3. 행렬·카메라·삼각형 모듈 분리
 4. back-face culling, clipping, 문자 명암과 anti-aliasing

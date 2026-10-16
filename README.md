@@ -38,24 +38,35 @@ make run
 
 빌드만 하려면 `make`, 생성물을 지우려면 `make clean`을 사용한다. 프로젝트별 차이와 조작법은 각 `README.md`를 따른다.
 
+저장소 루트에서는 다음 공통 명령을 제공한다. 루트 `make`는 열 개 프로젝트를 빌드하며 프로그램을 실행하지 않는다.
+
+```sh
+make                 # 전체 프로젝트 빌드
+make check           # 장치 독립 회귀 테스트와 Conway 규칙 테스트
+make check-graphics  # Windows OpenGL 드라이버의 실제 픽셀 출력 검사
+make check-audio     # 기본 WASAPI 출력 장치 검사 (소리 재생 없음)
+```
+
+검증 범위와 한계는 [tests/README.md](tests/README.md), 최근 전체 점검 결과와 남은 과제는 [유지보수 점검](docs/MAINTENANCE.md)에 정리한다. 각 프로젝트 내부의 기존 `make run`은 그대로 사용한다.
+
 ## 프로젝트 카탈로그
 
 난이도는 코드 길이가 아니라 이론, 수치 안정성, 플랫폼 결합, 렌더링과 병렬화까지 포함한 상대적인 구현 난이도다. `1`은 입문 규모, `5`는 여러 전문 영역을 함께 다루는 연구·엔진 규모다.
 
 | 프로젝트 | 분야·형태 | 언어·표준 | 핵심 기술과 개념 | 난이도 | 현재 성격 |
 |---|---|---|---|---:|---|
-| [rotating-cube-c](rotating-cube-c/README.md) | 콘솔 ASCII 3D | C17 | 3축 회전, 원근 투영, 문자 프레임버퍼, Z-buffer, ANSI 제어 | 2/5 | 완결된 소형 학습 예제 |
+| [rotating-cube-c](rotating-cube-c/README.md) | 콘솔 ASCII 3D | C23 | 3축 회전, 원근 투영, 문자 프레임버퍼, Z-buffer, ANSI 제어 | 2/5 | 완결된 소형 학습 예제 |
 | [conways-game-of-life-c](conways-game-of-life-c/README.md) | 콘솔 셀룰러 오토마타 | C23 | B3/S23, Moore 이웃, 동시 이중 버퍼, 토러스 경계, ANSI 편집 UI | 2/5 | 상호작용 가능한 생명 게임 실험기 |
-| [rotating-cube-cpp](rotating-cube-cpp/README.md) | 콘솔 ASCII 3D | C++20 | C 버전과 같은 수학, RAII, `std::array`, 구조적 바인딩, 원자 종료 상태 | 2/5 | C/C++ 설계 비교 예제 |
+| [rotating-cube-cpp](rotating-cube-cpp/README.md) | 콘솔 ASCII 3D | C++23 | C 버전과 같은 수학, RAII, `std::array`, 구조적 바인딩, signal-safe 종료 상태 | 2/5 | C/C++ 설계 비교 예제 |
 | [keyboard-piano-cpp](keyboard-piano-cpp/README.md) | 콘솔 Piano·Drum 악기 | C++23 | WASAPI 저지연 출력, 다성·타악 합성, ADSR, noise filtering, stereo reverb | 3/5 | 외부 음원 없는 연주 가능한 신시사이저 |
-| [double-pendulum-c](double-pendulum-c/README.md) | Win32/GDI 물리 GUI | C17 | 결합 비선형 ODE, RK4, 카오스, GDI 이중 버퍼링 | 3/5 | 상호작용 가능한 수치 시뮬레이션 |
-| [fluid-sim-c](fluid-sim-c/README.md) | Win32/GDI 2D 유동 | C17 | Stable Fluids 계열, 이류·확산·압력 투영, 격자 경계 | 3/5 | CPU 유체 알고리즘 학습기 |
-| [ray-tracer-c](ray-tracer-c/README.md) | CPU 오프라인 렌더러 | C17 | 광선 교차, 재귀 반사, hard shadow, Blinn-Phong, supersampling | 3/5 | 소형 Whitted-style 레이트레이서 |
-| [opengl-shooter-c](opengl-shooter-c/README.md) | 2D OpenGL 게임 | C17 | 실시간 게임 루프, 객체 풀, 원 충돌, 조준·연사, 입자 효과 | 3/5 | 플레이 가능한 아케이드 프로토타입 |
-| [opengl-shooter-3d-c](opengl-shooter-3d-c/README.md) | 3D OpenGL FPS | C17 | 1인칭 카메라, AABB 충돌, hitscan raycast, 대형 절차식 맵 | 4/5 | 단일 파일 3D 게임 프로토타입 |
+| [double-pendulum-c](double-pendulum-c/README.md) | Win32/GDI 물리 GUI | C23 | 결합 비선형 ODE, RK4, 카오스, GDI 이중 버퍼링 | 3/5 | 상호작용 가능한 수치 시뮬레이션 |
+| [fluid-sim-c](fluid-sim-c/README.md) | Win32/GDI 2D 유동 | C23 | Stable Fluids 계열, 이류·확산·압력 투영, 격자 경계 | 3/5 | CPU 유체 알고리즘 학습기 |
+| [ray-tracer-c](ray-tracer-c/README.md) | CPU 오프라인 렌더러 | C23 | 광선 교차, 재귀 반사, hard shadow, Blinn-Phong, supersampling | 3/5 | 소형 Whitted-style 레이트레이서 |
+| [opengl-shooter-c](opengl-shooter-c/README.md) | 2D OpenGL 게임 | C23 | 실시간 게임 루프, 객체 풀, 원 충돌, 조준·연사, 입자 효과 | 3/5 | 플레이 가능한 아케이드 프로토타입 |
+| [opengl-shooter-3d-c](opengl-shooter-3d-c/README.md) | 3D OpenGL FPS | C23 | 1인칭 카메라, AABB 충돌, hitscan raycast, 대형 절차식 맵 | 4/5 | 단일 파일 3D 게임 프로토타입 |
 | [fluid-sim-3d-c](fluid-sim-3d-c/README.md) | GPU 복합 물리 샌드박스 | C23 | 높이장, FLIP/PIC, APIC/MLS-MPM, 화면 공간 수면, OpenMP·compute | 5/5 | 계속 확장하는 주력 연구 프로젝트 |
 
-표의 표준은 현재 각 `Makefile`에 지정된 실제 컴파일 모드다. 작은 기존 프로젝트의 C17/C++20을 C23/C++23으로 올리는 작업은 별도의 검증을 거쳐 진행한다.
+표의 표준은 현재 각 `Makefile`에 지정된 실제 컴파일 모드다. 기존 C17/C++20 프로젝트도 현재 GCC/G++ 14.4.0이 지원하는 C23/C++23으로 전환했다. 컴파일 모드 지정이 표준의 모든 기능을 컴파일러가 완전히 구현한다는 뜻은 아니다.
 
 ## 프로젝트별 개요
 
@@ -67,7 +78,7 @@ make run
 
 #### rotating-cube-cpp
 
-같은 시각 결과를 C++20의 값 타입과 자원 수명 관리 방식으로 다시 구성한 비교 프로젝트다. `Terminal`의 생성자·소멸자가 커서 표시 상태를 복구하고, `CubeRenderer`가 화면과 깊이 버퍼를 소유한다. 알고리즘 차이보다 C와 C++의 표현력·불변식·소유권 차이를 보는 프로젝트다.
+같은 시각 결과를 C++23의 값 타입과 자원 수명 관리 방식으로 다시 구성한 비교 프로젝트다. `Terminal`의 생성자·소멸자가 커서 표시 상태를 복구하고, `CubeRenderer`가 화면과 깊이 버퍼를 소유한다. 알고리즘 차이보다 C와 C++의 표현력·불변식·소유권 차이를 보는 프로젝트다.
 
 ### 셀룰러 오토마타
 
@@ -137,9 +148,9 @@ OpenGL 없이 CPU가 720×405 영상을 직접 계산한다. 구와 평면의 �
 
 따라서 드라이버의 고정 파이프라인만 사용하는 코드는 아니지만, 이상적인 현대 OpenGL 구조도 아니다. 행렬 변환이 CPU에서 수행되고 draw마다 VBO를 다시 업로드하며, 법선·조명·재질·fog 호환 함수 일부는 실제로 아무 효과가 없다. 새 프로젝트에서 이 API를 사용하지 않으며, 기존 슈팅 프로젝트도 외부 셰이더·영구 GPU 버퍼·명시적 uniform 기반 렌더러로 교체하는 것이 목표다.
 
-### pic
+### 참고 자료
 
-`pic/`은 실행 프로젝트가 아니라 물리 시뮬레이션 방향을 조사할 때 수집한 참고 이미지 모음이다. 이미지 자체는 구현 완료 증거가 아니며, 코드가 지원하는 기능은 각 프로젝트 문서와 실제 소스만을 기준으로 판단한다.
+물리 시뮬레이션의 참고 이미지·영상·논문은 관련 프로젝트 문서에서 관리한다. 개인적으로 수집한 `pic/` 이미지가 모든 checkout에 포함된다고 가정하지 않는다. 참고 자료는 구현 완료 증거가 아니며, 실제 지원 기능은 코드와 실행 검증을 기준으로 판단한다.
 
 ## 문서 구조
 
@@ -155,11 +166,11 @@ OpenGL 없이 CPU가 720×405 영상을 직접 계산한다. 구와 평면의 �
 
 ## 공통 개선 방향
 
-1. 작은 C17/C++20 프로젝트의 C23/C++23 전환 가능성을 프로젝트별로 검증한다.
+1. 현재 C23/C++23 빌드를 유지하고 컴파일러·의존성 변경 시 전체 회귀 검증을 수행한다.
 2. 두 슈팅 프로젝트에서 `modern_gl_compat.h` 의존성을 제거하고 네이티브 현대 OpenGL 렌더러로 모듈화한다.
 3. 단일 파일 프로젝트가 커지면 플랫폼, 수학, 시뮬레이션, 렌더링과 입력 모듈을 분리한다.
 4. 수치 프로젝트에 에너지·질량·발산 오차 같은 검증 지표와 재현 가능한 테스트를 추가한다.
-5. 공통 빌드 검사와 실행 smoke test를 자동화한다.
+5. 공통 `make check`에 더 많은 수치 오차 검사와 GUI 실행 smoke test를 추가한다.
 6. 플랫폼 종속 Win32 계층과 핵심 알고리즘을 분리해 다른 창·입력 백엔드로 확장할 수 있게 한다.
 7. 새 프로젝트는 시스템, 네트워크, 데이터베이스, 컴파일러, 오디오, 영상, 도구, 과학 계산, AI, 게임 엔진 등 현재 목록에 없는 분야도 자유롭게 추가한다.
 

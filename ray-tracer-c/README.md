@@ -9,7 +9,7 @@ C로 작성한 단일 스레드 CPU Whitted-style 레이트레이서다. OpenGL�
 | 항목 | 내용 |
 |---|---|
 | 분야 | 컴퓨터 그래픽스, 기하 광학, 오프라인 렌더링 |
-| 언어 | C17 |
+| 언어 | C23 |
 | 플랫폼·표시 | Win32 창 + GDI `StretchDIBits` |
 | 렌더 해상도 | 720×405 |
 | 표본 수 | 픽셀당 고정 2×2, 총 4 samples |
@@ -28,7 +28,7 @@ make run
 
 | 입력 | 동작 |
 |---|---|
-| `R` | 전체 영상을 다시 계산 |
+| `R` | 렌더 완료 후 전체 영상을 다시 계산 |
 | `S` | 현재 영상의 `ray_tracer_output.ppm` 저장 |
 | `Esc` | 종료 |
 
@@ -104,17 +104,19 @@ forward, right, up 기저를 만든 뒤 viewport의 lower-left와 수평·수직
 
 ## 장면과 재질
 
-`Material`은 base color, diffuse 계수, specular 계수와 reflective 비율을 가진다. 장면에는 서로 다른 크기와 색의 구 네 개, checker와 얇은 줄무늬를 절차적으로 계산하는 바닥, 수직 방향 sky gradient가 있다.
+`Material`은 base color, diffuse 계수, specular 계수, reflective 비율과 checkerboard 여부를 가진다. 장면에는 서로 다른 크기와 색의 구 네 개, checker와 얇은 줄무늬를 절차적으로 계산하는 바닥, 수직 방향 sky gradient가 있다. 바닥 무늬는 재질 플래그로 선택하므로 위를 향한 구 표면에 잘못 적용되지 않는다.
 
 바닥 무늬는 texture image가 아니라 hit point의 `x`, `z` 좌표를 `floor`와 `fmod`에 넣어 계산한다.
 
 ## Win32와 출력 구조
 
 - `WM_CREATE`가 사용자 메시지 `WM_APP+1`을 post한다.
-- `WM_APP+1` handler가 UI thread에서 전체 영상을 렌더링한다.
-- 24개 scanline마다 paint를 강제로 갱신해 진행 중인 일부 결과를 표시한다.
+- `WM_APP+1` handler는 UI thread에서 처음 8개 scanline을 계산하고, 이후 batch는 낮은 우선순위의 one-shot `WM_TIMER`로 예약한다. posted 작업이 키·마우스 메시지보다 계속 먼저 처리되는 상황을 피한다.
+- 각 batch 사이에 paint와 입력 메시지를 처리하므로 렌더 도중에도 창 이동·닫기·Esc에 응답한다. 멀티스레드 렌더러는 아니다.
 - 렌더가 끝나면 창 제목을 조작 안내로 변경한다.
 - `S`는 Netpbm PPM의 `P6` header와 RGB bytes를 저장한다.
+
+PPM 저장은 쓰기와 닫기 오류도 확인한다. 카메라의 right/up 방향과 픽셀 표본 정규화를 수정해 좌우 반전과 viewport 바깥 표본을 방지한다.
 
 PPM은 단순하고 무손실이지만 일반 Windows 이미지 뷰어가 바로 열지 못할 수 있다.
 
@@ -131,7 +133,7 @@ pixels × samples × recursive rays × scene primitives
 ## 현재 한계
 
 - 단일 CPU thread라 코어를 하나만 사용한다.
-- 렌더링이 UI thread에서 실행되어 계산 중 입력 응답이 제한된다.
+- 계산과 UI가 같은 thread여서 한 batch의 계산 중에는 입력 응답이 지연될 수 있다.
 - 구와 평면만 지원하고 triangle, mesh, texture mapping과 BVH가 없다.
 - hard shadow만 있으며 area light, soft shadow와 depth of field가 없다.
 - refraction, dielectric, Fresnel, physically based BRDF가 없다.
@@ -152,6 +154,8 @@ pixels × samples × recursive rays × scene primitives
 8. 카메라·장면·재질·renderer를 별도 모듈로 분리
 
 ## 참고 자료
+
+저장소 루트의 `make check`는 카메라 좌우·상하, 광선 정규화, 구·평면 교차와 바닥 재질 선택을 검사한다. [공통 테스트](../tests/README.md)를 참고한다.
 
 - [Ray Tracing in One Weekend](https://raytracing.github.io/books/RayTracingInOneWeekend.html)
 - [Netpbm PPM format](https://netpbm.sourceforge.net/doc/ppm.html)

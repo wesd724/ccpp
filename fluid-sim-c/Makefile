@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -std=c17 -Wall -Wextra -pedantic -O2
+CFLAGS := -std=c23 -Wall -Wextra -pedantic -O2
 LDLIBS := -lgdi32 -luser32 -lm
 TARGET := fluid_sim
 
@@ -7,7 +7,7 @@ TARGET := fluid_sim
 
 all: $(TARGET)
 
-$(TARGET): main.c
+$(TARGET): main.c Makefile
 	$(CC) $(CFLAGS) -mwindows -o $@ $< $(LDLIBS)
 
 run: $(TARGET)

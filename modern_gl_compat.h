@@ -40,6 +40,9 @@ static PFNGLLINKPROGRAMPROC mglLinkProgram;
 static PFNGLGETPROGRAMIVPROC mglGetProgramiv;
 static PFNGLGETPROGRAMINFOLOGPROC mglGetProgramInfoLog;
 static PFNGLDELETESHADERPROC mglDeleteShader;
+static PFNGLDELETEPROGRAMPROC mglDeleteProgram;
+static PFNGLDELETEBUFFERSPROC mglDeleteBuffers;
+static PFNGLDELETEVERTEXARRAYSPROC mglDeleteVertexArrays;
 static PFNGLUSEPROGRAMPROC mglUseProgram;
 static PFNGLGENBUFFERSPROC mglGenBuffers;
 static PFNGLBINDBUFFERPROC mglBindBuffer;
@@ -130,8 +133,21 @@ static GLuint mgl_compile(GLenum type, const char *source)
         char log[2048];
         mglGetShaderInfoLog(shader, sizeof(log), NULL, log);
         MessageBoxA(NULL, log, "Shader compile error", MB_ICONERROR);
+        mglDeleteShader(shader);
+        return 0;
     }
     return shader;
+}
+
+static void mgl_shutdown(void)
+{
+    if (mgl_program) mglUseProgram(0);
+    if (mgl_vbo) mglDeleteBuffers(1, &mgl_vbo);
+    if (mgl_vao) mglDeleteVertexArrays(1, &mgl_vao);
+    if (mgl_program) mglDeleteProgram(mgl_program);
+    mgl_program = mgl_vao = mgl_vbo = 0;
+    mgl_projection_top = mgl_modelview_top = 0;
+    mgl_ready = false;
 }
 
 static bool mgl_init(void)
@@ -147,6 +163,9 @@ static bool mgl_init(void)
     mglGetProgramiv = (PFNGLGETPROGRAMIVPROC)mgl_get_proc("glGetProgramiv");
     mglGetProgramInfoLog = (PFNGLGETPROGRAMINFOLOGPROC)mgl_get_proc("glGetProgramInfoLog");
     mglDeleteShader = (PFNGLDELETESHADERPROC)mgl_get_proc("glDeleteShader");
+    mglDeleteProgram = (PFNGLDELETEPROGRAMPROC)mgl_get_proc("glDeleteProgram");
+    mglDeleteBuffers = (PFNGLDELETEBUFFERSPROC)mgl_get_proc("glDeleteBuffers");
+    mglDeleteVertexArrays = (PFNGLDELETEVERTEXARRAYSPROC)mgl_get_proc("glDeleteVertexArrays");
     mglUseProgram = (PFNGLUSEPROGRAMPROC)mgl_get_proc("glUseProgram");
     mglGenBuffers = (PFNGLGENBUFFERSPROC)mgl_get_proc("glGenBuffers");
     mglBindBuffer = (PFNGLBINDBUFFERPROC)mgl_get_proc("glBindBuffer");
@@ -156,7 +175,12 @@ static bool mgl_init(void)
     mglEnableVertexAttribArray = (PFNGLENABLEVERTEXATTRIBARRAYPROC)mgl_get_proc("glEnableVertexAttribArray");
     mglVertexAttribPointer = (PFNGLVERTEXATTRIBPOINTERPROC)mgl_get_proc("glVertexAttribPointer");
 
-    if (!mglCreateShader || !mglGenBuffers || !mglGenVertexArrays) {
+    if (!mglCreateShader || !mglShaderSource || !mglCompileShader || !mglGetShaderiv ||
+        !mglGetShaderInfoLog || !mglCreateProgram || !mglAttachShader || !mglLinkProgram ||
+        !mglGetProgramiv || !mglGetProgramInfoLog || !mglDeleteShader || !mglDeleteProgram ||
+        !mglDeleteBuffers || !mglDeleteVertexArrays || !mglUseProgram || !mglGenBuffers ||
+        !mglBindBuffer || !mglBufferData || !mglGenVertexArrays || !mglBindVertexArray ||
+        !mglEnableVertexAttribArray || !mglVertexAttribPointer) {
         MessageBoxA(NULL, "Modern OpenGL functions could not be loaded.", "OpenGL", MB_ICONERROR);
         return false;
     }
@@ -175,23 +199,33 @@ static bool mgl_init(void)
 
     GLuint vert = mgl_compile(GL_VERTEX_SHADER, vs);
     GLuint frag = mgl_compile(GL_FRAGMENT_SHADER, fs);
+    if (!vert || !frag) {
+        if (vert) mglDeleteShader(vert);
+        if (frag) mglDeleteShader(frag);
+        return false;
+    }
     mgl_program = mglCreateProgram();
     mglAttachShader(mgl_program, vert);
     mglAttachShader(mgl_program, frag);
     mglLinkProgram(mgl_program);
     GLint ok = 0;
     mglGetProgramiv(mgl_program, GL_LINK_STATUS, &ok);
+    mglDeleteShader(vert);
+    mglDeleteShader(frag);
     if (!ok) {
         char log[2048];
         mglGetProgramInfoLog(mgl_program, sizeof(log), NULL, log);
         MessageBoxA(NULL, log, "Program link error", MB_ICONERROR);
+        mgl_shutdown();
         return false;
     }
-    mglDeleteShader(vert);
-    mglDeleteShader(frag);
 
     mglGenVertexArrays(1, &mgl_vao);
     mglGenBuffers(1, &mgl_vbo);
+    if (!mgl_vao || !mgl_vbo) {
+        mgl_shutdown();
+        return false;
+    }
     mglBindVertexArray(mgl_vao);
     mglBindBuffer(GL_ARRAY_BUFFER, mgl_vbo);
     mglBufferData(GL_ARRAY_BUFFER, sizeof(mgl_output), NULL, GL_DYNAMIC_DRAW);

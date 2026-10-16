@@ -7,7 +7,7 @@ C, Win32/WGL과 OpenGL로 만든 1인칭 3D 슈팅 프로토타입이다. 144×1
 | 항목 | 내용 |
 |---|---|
 | 분야 | 3D 게임, 실시간 그래픽스, 충돌·광선 질의 |
-| 언어 | C17 |
+| 언어 | C23 |
 | 플랫폼 | Windows desktop, Win32, WGL |
 | 초기 창 크기 | 1100×760, resize 반영 |
 | 맵 범위 | X·Z 각각 `[-72, 72]` |
@@ -33,6 +33,8 @@ make run
 | `Esc` | 종료 |
 
 창에 focus가 생기면 커서를 숨기고 중앙에 고정한다. focus를 잃거나 game over가 되면 mouse capture를 해제하고 커서를 다시 표시한다.
+
+포커스를 잃으면 키·발사 상태도 초기화하고 background에서는 게임 갱신과 전역 키 polling을 중단한다. 따라서 다른 창에서 타이핑한 키가 이동·발사로 적용되거나 Alt+Tab 뒤 이동이 붙는 현상을 방지한다. 종료 시 GL program/VAO/VBO를 context보다 먼저 해제하고 파괴된 창에 추가 프레임을 제출하지 않는다.
 
 ## 게임 상태
 
@@ -152,7 +154,7 @@ PeekMessage로 입력 처리
 
 ## 현재 한계
 
-- 1,358줄의 단일 `main.c`에 플랫폼, 게임, 수학과 렌더링이 결합되어 있다.
+- 1,300줄이 넘는 단일 `main.c`에 플랫폼, 게임, 수학과 렌더링이 결합되어 있다.
 - 임시 OpenGL 호환 레이어 때문에 법선·조명·재질 설정이 실제 shading에 반영되지 않는다.
 - texture, normal map, shadow map, PBR, post-processing과 model asset이 없다.
 - 적은 box 조합이고 skeletal animation·hit region이 없다.
@@ -175,6 +177,8 @@ PeekMessage로 입력 처리
 9. 맵 데이터를 코드에서 외부 scene format으로 분리
 
 ## 참고 자료
+
+루트 `make check`에서 포커스 손실 뒤 키·발사 해제를 검사한다. 공용 GL 레이어의 함수 로딩과 compile/link 실패 처리를 보강했고 `make check-graphics`로 실제 픽셀 출력·해제·재초기화를 검사한다. 플레이 전체의 자동 검증은 아니며 [공통 테스트](../tests/README.md)에 범위를 기록한다.
 
 - [Khronos OpenGL Registry](https://registry.khronos.org/OpenGL/index_gl.php)
 - [OpenGL 4.6 core reference pages](https://registry.khronos.org/OpenGL-Refpages/gl4/html/start.html)

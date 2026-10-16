@@ -65,6 +65,9 @@ static void test_underpopulation_and_overpopulation(void)
     begin_test();
     LifeGrid grid = {0};
     EXPECT(life_grid_init(&grid, 5, 5));
+    life_grid_set(&grid, 2, 2, true);
+    life_grid_step(&grid);
+    EXPECT(grid.population == 0 && grid.deaths == 1);
     life_grid_set(&grid, 1, 1, true);
     life_grid_set(&grid, 2, 1, true);
     life_grid_set(&grid, 1, 2, true);
@@ -73,6 +76,77 @@ static void test_underpopulation_and_overpopulation(void)
     life_grid_step(&grid);
     EXPECT(!life_grid_get(&grid, 2, 1));
     EXPECT(!life_grid_get(&grid, 2, 2));
+    life_grid_destroy(&grid);
+}
+
+static void test_all_local_neighborhoods(void)
+{
+    begin_test();
+    LifeGrid grid = {0};
+    EXPECT(life_grid_init(&grid, 5, 5));
+    if (grid.cells == NULL) return;
+    for (unsigned mask = 0; mask < 512; ++mask) {
+        life_grid_clear(&grid);
+        int neighbors = 0;
+        for (unsigned i = 0; i < 9; ++i) {
+            const bool alive = (mask & (1U << i)) != 0;
+            life_grid_set(&grid, 1 + i % 3, 1 + i / 3, alive);
+            if (i != 4 && alive) ++neighbors;
+        }
+        const bool alive = (mask & (1U << 4)) != 0;
+        const bool expected = neighbors == 3 || (alive && neighbors == 2);
+        const uint64_t before = grid.population;
+        life_grid_step(&grid);
+        EXPECT(life_grid_get(&grid, 2, 2) == expected);
+        EXPECT(grid.population + grid.deaths == before + grid.births);
+    }
+    life_grid_destroy(&grid);
+}
+
+static void test_age_saturation(void)
+{
+    begin_test();
+    LifeGrid grid = {0};
+    EXPECT(life_grid_init(&grid, 6, 6));
+    life_pattern_place(&grid, life_pattern_get(0), 3, 3);
+    for (int i = 0; i < 300; ++i) life_grid_step(&grid);
+    EXPECT(grid.population == 4);
+    EXPECT(life_grid_age(&grid, 2, 2) == UINT8_MAX);
+    life_grid_destroy(&grid);
+}
+
+static void test_pattern_evolution(void)
+{
+    begin_test();
+    LifeGrid grid = {0};
+    LifeGrid expected = {0};
+    EXPECT(life_grid_init(&grid, 25, 25));
+    EXPECT(life_grid_init(&expected, 25, 25));
+    life_pattern_place(&grid, life_pattern_get(2), 10, 10);
+    life_pattern_place(&expected, life_pattern_get(2), 11, 11);
+    for (int i = 0; i < 4; ++i) life_grid_step(&grid);
+    EXPECT(life_grid_hash(&grid) == life_grid_hash(&expected));
+    life_grid_clear(&grid);
+    life_pattern_place(&grid, life_pattern_get(3), 12, 12);
+    const uint64_t initial = life_grid_hash(&grid);
+    for (int i = 0; i < 3; ++i) life_grid_step(&grid);
+    EXPECT(life_grid_hash(&grid) == initial);
+    life_grid_destroy(&grid);
+    life_grid_destroy(&expected);
+}
+
+static void test_invalid_dimensions(void)
+{
+    begin_test();
+    LifeGrid grid = {0};
+    EXPECT(!life_grid_init(&grid, 0, 5));
+    EXPECT(!life_grid_init(&grid, SIZE_MAX, 2));
+    EXPECT(!life_grid_init(&grid, (size_t)PTRDIFF_MAX + 1U, 1));
+    EXPECT(life_grid_init(&grid, 5, 5));
+    life_grid_set(&grid, 2, 2, true);
+    EXPECT(!life_grid_resize(&grid, 0, 8));
+    EXPECT(grid.width == 5 && grid.height == 5 && grid.population == 1);
+    life_grid_destroy(&grid);
     life_grid_destroy(&grid);
 }
 
@@ -154,6 +228,10 @@ int main(void)
     test_patterns_have_expected_population();
     test_randomization_is_reproducible();
     test_resize_preserves_center();
+    test_all_local_neighborhoods();
+    test_age_saturation();
+    test_pattern_evolution();
+    test_invalid_dimensions();
 
     if (failures != 0) {
         fprintf(stderr, "%d of %d tests failed.\n", failures, tests_run);

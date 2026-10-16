@@ -7,7 +7,7 @@ C, Win32/WGL과 OpenGL로 만든 2D top-down 아케이드 슈팅 게임이다. �
 | 항목 | 내용 |
 |---|---|
 | 분야 | 2D 게임, 실시간 시뮬레이션, OpenGL |
-| 언어 | C17 |
+| 언어 | C23 |
 | 플랫폼 | Windows desktop, Win32, WGL |
 | 논리 해상도 | 1000×720 고정 |
 | 그래픽 경로 | `modern_gl_compat.h`를 통한 GLSL 3.30 + VAO/VBO 변환 |
@@ -112,9 +112,13 @@ poll messages -> measure dt -> update game -> render -> Sleep(1)
 
 키 상태 배열과 `GetAsyncKeyState`를 함께 사용해 key message가 누락되거나 focus 전환 직후에도 입력을 보완한다.
 
+입력 polling과 게임 갱신은 이 창이 foreground일 때만 수행한다. 포커스를 잃으면 눌린 키·발사 상태를 지우고, capture 취소 시에도 발사를 멈춘다. 창이 파괴된 뒤에는 추가 update/render 없이 루프를 종료하며 GL 자원은 context를 해제하기 전에 정리한다.
+
+논리 좌표는 1000×720을 유지하되 viewport는 실제 client 크기에 맞추고 마우스 좌표는 역변환한다. 적 추적의 지수 평활과 파티클 감쇠는 `dt`에 맞춰 60Hz 기준 계수를 보정한다. 이 보정이 variable-step 이동과 충돌까지 완전히 frame-independent하게 만드는 것은 아니다.
+
 ## 현재 한계
 
-- 논리 viewport와 마우스·경계가 1000×720으로 고정되어 창 resize를 올바르게 반영하지 않는다.
+- 창 크기에 맞춰 논리 화면 전체를 늘리므로 원래 종횡비와 다르게 resize하면 도형이 늘어날 수 있다.
 - texture, sprite atlas, text HUD, audio와 animation asset이 없다.
 - 모든 게임·플랫폼·렌더링 코드가 `main.c` 한 파일에 결합되어 있다.
 - 충돌은 frame 간 swept test가 아닌 현재 위치 원 검사라 매우 큰 `dt`에서는 tunneling 가능성이 있다.
@@ -127,13 +131,15 @@ poll messages -> measure dt -> update game -> render -> Sleep(1)
 
 1. native GLSL 파일, shader program, persistent VAO/VBO 기반 batch renderer
 2. Win32 platform, renderer, game state, collision과 effect 모듈 분리
-3. resize 가능한 logical viewport와 mouse 좌표 변환
+3. 종횡비를 유지하는 letterbox viewport와 대응 입력 변환
 4. texture atlas, text HUD, audio와 game menu
 5. swept collision 또는 고정 물리 step
 6. 적 유형·weapon·wave·pickup과 deterministic seed/replay
 7. unit test 가능한 순수 게임 로직과 render regression test
 
 ## 참고 자료
+
+루트 `make check`는 포커스·capture 취소와 resize 입력을, `make check-graphics`는 공용 GL 레이어의 실제 삼각형 픽셀과 재초기화를 검사한다. GL 함수 전체의 로딩 성공 여부를 확인하고 shader compile/link 실패 시 중간 자원을 정리한다. [공통 테스트](../tests/README.md)를 참고한다.
 
 - [Khronos OpenGL Registry](https://registry.khronos.org/OpenGL/index_gl.php)
 - [OpenGL 4.6 core reference pages](https://registry.khronos.org/OpenGL-Refpages/gl4/html/start.html)

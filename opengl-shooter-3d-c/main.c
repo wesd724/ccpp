@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <windows.h>
 
@@ -195,7 +196,8 @@ static float distance_xz(Vec3 a, Vec3 b)
 
 static bool key_is_down(int key)
 {
-    return keys[key] || (GetAsyncKeyState(key) & 0x8000) != 0;
+    return key >= 0 && key < 256 && GetForegroundWindow() == window_handle
+        && (keys[key] || (GetAsyncKeyState(key) & 0x8000) != 0);
 }
 
 static float clamp_float(float value, float min, float max)
@@ -589,6 +591,7 @@ static void update_title(float dt)
 
 static void update_game(float dt)
 {
+    if (GetForegroundWindow() != window_handle) return;
     if (dt > 0.05f) {
         dt = 0.05f;
     }
@@ -1173,6 +1176,7 @@ static void shutdown_opengl(void)
 {
     set_mouse_lock(false);
     if (render_context != NULL) {
+        mgl_shutdown();
         wglMakeCurrent(NULL, NULL);
         wglDeleteContext(render_context);
         render_context = NULL;
@@ -1192,6 +1196,7 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPAR
 
     case WM_DESTROY:
         running = false;
+        shutdown_opengl();
         PostQuitMessage(0);
         return 0;
 
@@ -1202,6 +1207,8 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPAR
         return 0;
 
     case WM_KILLFOCUS:
+        memset(keys, 0, sizeof(keys));
+        mouse_down = false;
         set_mouse_lock(false);
         return 0;
 
@@ -1326,6 +1333,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comman
     }
 
     if (!initialize_opengl(window_handle)) {
+        shutdown_opengl();
         MessageBoxA(window_handle, "OpenGL initialization failed.", "OpenGL Shooter 3D", MB_ICONERROR);
         return 1;
     }
@@ -1343,6 +1351,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comman
             TranslateMessage(&message);
             DispatchMessageA(&message);
         }
+        if (!running) break;
 
         const double now = perf_seconds();
         const float dt = (float)(now - previous_time);

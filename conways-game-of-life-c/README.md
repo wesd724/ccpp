@@ -35,10 +35,12 @@ make check
 검증이 성공하면 다음 결과가 나온다.
 
 ```text
-All 7 Conway Life tests passed.
+All 11 Conway Life tests passed.
 ```
 
 프로그램은 키 입력을 즉시 읽을 수 있는 대화형 ANSI 터미널이 필요하다. 일반적인 Cygwin 터미널이나 VS Code 통합 터미널에서 실행할 수 있으며, 전체 HUD를 한 화면에서 보려면 80×24 이상의 터미널을 권장한다. 창 크기가 바뀌면 격자를 중앙 기준으로 확대하거나 축소하면서 남아 있는 셀을 보존한다.
+
+회귀 검증에는 중심 셀과 이웃을 포함한 512가지 상태, population 변화, 셀 나이 포화, Glider의 4세대 이동, Pulsar의 주기 3과 잘못된 크기 요청도 포함한다. 루트 `make check`는 수정키 방향키·application cursor·기능키 escape sequence 처리도 검사한다. 기능키의 숫자 매개변수는 패턴 배치 명령으로 해석하지 않는다. [공통 테스트](../tests/README.md)를 참고한다.
 
 ## 조작법
 

@@ -39,6 +39,7 @@ int main(void) {
     if (!platform_init(&platform, GetModuleHandleA(NULL), 1440, 900,
                        "fluid-sim-3d-c - nonlinear colliding waves")) {
         MessageBoxA(NULL, "Window or OpenGL context creation failed.", "fluid-sim-3d-c", MB_ICONERROR);
+        platform_shutdown(&platform);
         return 1;
     }
     if (!gl_api_load() || !fluid_sim_init(&fluid)) {
@@ -89,6 +90,7 @@ int main(void) {
 
     while (!platform.input.quit) {
         platform_poll(&platform);
+        if (platform.input.quit) break;
         LARGE_INTEGER now;
         QueryPerformanceCounter(&now);
         float delta_time = frame_seconds(now, previous, frequency);
